@@ -48,6 +48,7 @@ Install the project dependencies inside the Docker development environment.
 docker compose run --rm app npm install
 ```
 
+
 ## Development Environment
 
 Start the development server.
@@ -76,6 +77,7 @@ Resume the application:
 docker compose start
 ```
 
+
 ## Updating Dependencies
 
 After modifying `package.json` or `package-lock.json`, install the updated dependencies in both environments.
@@ -92,6 +94,7 @@ Docker:
 docker compose run --rm app npm install
 ```
 
+
 ## Recreating the Environment
 
 If the Docker configuration changes, recreate the containers:
@@ -107,3 +110,24 @@ If the `node_modules` Docker volume becomes inconsistent, recreate it:
 docker compose down -v
 docker compose up --build
 ```
+
+
+## Deployment
+
+TODO: Add deployment instructions
+
+
+## API Specification
+
+Xylem exposes the same public API as Anemochore.
+
+For endpoint definitions, request and response formats, authentication requirements, and error handling, refer to the Anemochore API specification:
+
+- https://github.com/hiroaki/anemochore/blob/main/docs/api.md
+
+Xylem acts as a Backend for Frontend (BFF) and forwards requests to Anemochore while keeping the Anemochore service API key on the server side. The public API is intentionally kept compatible with the Anemochore API.
+
+
+## License
+
+This project is licensed under the Zero-Clause BSD License (0BSD). See the [LICENSE](LICENSE) file for details.
