@@ -1,3 +1,5 @@
+[Japanese README](README.ja.md)
+
 # Xylem
 
 Xylem is a reference implementation of a BFF client for Anemochore.

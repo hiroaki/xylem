@@ -1,3 +1,5 @@
+[English README](README.md)
+
 # Xylem
 
 Xylem は Anemochore の BFF クライアントのリファレンス実装です。
