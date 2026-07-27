@@ -1,6 +1,7 @@
 import { Hono } from "hono";
-import { AnemochoreClient } from "../services/anemochore.js";
 import { getConfig } from "../config.js";
+import { AnemochoreClient } from "../services/anemochore.js";
+import { buildViewerUrl } from "../utils/viewer-url.js";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 
 const upload = new Hono();
@@ -12,9 +13,7 @@ upload.post("/api/upload", async (c) => {
 
   if (!(file instanceof File)) {
     return c.json(
-      {
-        error: "file is required",
-      },
+      { error: "file is required" },
       400,
     );
   }
@@ -26,7 +25,27 @@ upload.post("/api/upload", async (c) => {
 
   const response = await client.upload(file);
   const data = await response.json();
-  return c.json(data, response.status as ContentfulStatusCode);
+
+  if (data.url) {
+    data.url = buildViewerUrl(
+      config.viewerUrlTemplate,
+      rewritePublicUrl(data.url, config.xylemPublicOrigin),
+    );
+  }
+
+  return c.json(
+    data,
+    response.status as ContentfulStatusCode
+  );
 });
+
+function rewritePublicUrl(url: string, origin: string) {
+  const parsed = new URL(url);
+
+  return new URL(
+    parsed.pathname + parsed.search,
+    origin,
+  ).toString();
+}
 
 export default upload;

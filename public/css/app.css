@@ -1,0 +1,191 @@
+:root {
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+
+  color: #222;
+  background: #fff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.header {
+  padding: 1rem;
+  text-align: center;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.container {
+  width: 100%;
+  padding: 1rem;
+}
+
+
+/*
+ * Upload drop zone
+ */
+
+.drop-zone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  min-height: 180px;
+
+  border: 2px dashed #999;
+  border-radius: 12px;
+
+  text-align: center;
+
+  cursor: pointer;
+
+  background: #fafafa;
+}
+
+.drop-zone:hover {
+  background: #f2f2f2;
+}
+
+.drop-zone.drag-over {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.drop-zone-message {
+  line-height: 1.6;
+}
+
+
+/*
+ * Preview
+ */
+
+#preview-section h2,
+#result-section h2 {
+  margin-top: 1.5rem;
+  font-size: 1.2rem;
+}
+
+.map {
+  width: 100%;
+  height: 320px;
+
+  border-radius: 8px;
+
+  overflow: hidden;
+}
+
+
+.upload-actions {
+  margin-top: 1rem;
+
+  display: flex;
+  justify-content: center;
+}
+
+button {
+  min-height: 44px;
+
+  padding: 0 1.5rem;
+
+  border: 0;
+  border-radius: 8px;
+
+  background: #2563eb;
+  color: white;
+
+  font-size: 1rem;
+
+  cursor: pointer;
+}
+
+button:hover {
+  background: #1d4ed8;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+
+/*
+ * Result
+ */
+
+.result-item {
+  margin-top: 1rem;
+}
+
+.result-item label {
+  display: block;
+
+  margin-bottom: 0.5rem;
+
+  font-weight: bold;
+}
+
+.copy-field {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.copy-field input {
+  flex: 1;
+
+  min-width: 0;
+
+  padding: 0.75rem;
+
+  border: 1px solid #ccc;
+  border-radius: 6px;
+
+  font-size: 0.9rem;
+}
+
+
+/*
+ * Status
+ */
+
+#status-section {
+  margin-top: 1rem;
+}
+
+#status-message {
+  margin: 0;
+
+  color: #555;
+}
+
+
+/*
+ * Desktop
+ */
+
+@media (min-width: 768px) {
+
+  .container {
+    max-width: 640px;
+    margin: 0 auto;
+  }
+
+  .map {
+    height: 420px;
+  }
+
+}
+

@@ -9,6 +9,10 @@ services:
     environment:
       ANEMOCHORE_API_URL: ${ANEMOCHORE_API_URL}
       ANEMOCHORE_API_KEY: ${ANEMOCHORE_API_KEY}
+      XYLEM_PUBLIC_ORIGIN: ${XYLEM_PUBLIC_ORIGIN}
+      VIEWER_URL_TEMPLATE: ${VIEWER_URL_TEMPLATE}
+      BINDING: ${BINDING}
+      PORT: ${PORT}
     command: npm run dev
 
 volumes:

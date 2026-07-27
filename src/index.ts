@@ -36,7 +36,16 @@ app.onError((err, c) => {
   );
 });
 
-serve({
-  fetch: app.fetch,
-  port: 3000,
-});
+const binding = process.env.BINDING || '0.0.0.0';
+const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+
+serve(
+  {
+    fetch: app.fetch,
+    port: port,
+    hostname: binding
+  },
+  (info) => {
+    console.info(`Xylem server starting on ${info.address}:${info.port}`);
+  }
+);

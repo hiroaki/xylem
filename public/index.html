@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta
+  name="viewport"
+  content="width=device-width, initial-scale=1.0"
+>
+
+<title>Xylem - GPX Upload</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@2.0.0-alpha.1/dist/leaflet.css" />
+<link rel="stylesheet" href="/css/app.css">
+<script type="importmap">
+{
+  "imports": {
+    "leaflet": "https://unpkg.com/leaflet@2.0.0-alpha.1/dist/leaflet.js",
+    "exifr": "https://cdn.jsdelivr.net/npm/exifr@7.1.3/dist/lite.esm.js"
+  }
+}
+</script>
+</head>
+<body>
+
+  <header class="header">
+    <h1>Xylem</h1>
+  </header>
+
+  <main class="container">
+
+    <section id="upload-section">
+      <label
+        id="drop-zone"
+        class="drop-zone"
+      >
+
+        <span class="drop-zone-message">
+          Drop a GPX file here<br>
+          or click to select
+        </span>
+
+        <input
+          id="file-input"
+          type="file"
+          accept=".gpx,application/gpx+xml"
+          hidden
+        >
+
+      </label>
+    </section>
+
+
+    <section
+      id="preview-section"
+      hidden
+    >
+
+      <h2>Confirm your GPX</h2>
+
+      <div
+        id="map"
+        class="map"
+      ></div>
+
+      <div class="upload-actions">
+        <button
+          id="upload-button"
+          type="button"
+        >
+          Upload
+        </button>
+      </div>
+
+    </section>
+
+
+    <section
+      id="result-section"
+      hidden
+    >
+
+      <h2>Upload completed</h2>
+
+      <div class="result-item">
+
+        <label>
+          Share URL
+        </label>
+
+        <div class="copy-field">
+
+          <input
+            id="share-url"
+            type="text"
+            readonly
+          >
+
+          <button
+            id="copy-url-button"
+            type="button"
+          >
+            Copy
+          </button>
+
+        </div>
+      </div>
+
+
+      <div class="result-item">
+
+        <label>
+          Delete Key
+        </label>
+
+        <div class="copy-field">
+
+          <input
+            id="delete-key"
+            type="text"
+            readonly
+          >
+
+          <button
+            id="copy-delete-key-button"
+            type="button"
+          >
+            Copy
+          </button>
+
+        </div>
+      </div>
+
+    </section>
+
+
+    <section
+      id="status-section"
+      aria-live="polite"
+    >
+      <p id="status-message"></p>
+    </section>
+
+  </main>
+
+  <script
+    type="module"
+    src="/js/app.js"
+  ></script>
+
+</body>
+</html>
