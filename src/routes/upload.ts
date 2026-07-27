@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { AnemochoreClient } from "../services/anemochore.js";
 import { getConfig } from "../config.js";
+import type { ContentfulStatusCode } from "hono/utils/http-status";
 
 const upload = new Hono();
 const config = getConfig();
@@ -24,11 +25,8 @@ upload.post("/api/upload", async (c) => {
   );
 
   const response = await client.upload(file);
-
-  return new Response(response.body, {
-    status: response.status,
-    headers: response.headers,
-  });
+  const data = await response.json();
+  return c.json(data, response.status as ContentfulStatusCode);
 });
 
 export default upload;
