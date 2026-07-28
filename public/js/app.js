@@ -16,6 +16,9 @@ const elements = {
 
   map: document.querySelector("#map"),
 
+  previewTitle: document.querySelector("#preview-title"),
+  uploadActions: document.querySelector("#upload-actions"),
+
   uploadButton: document.querySelector("#upload-button"),
 
   shareUrl: document.querySelector("#share-url"),
@@ -33,6 +36,39 @@ function showPreview() {
   elements.previewSection.hidden = false;
 }
 
+async function completeUploadUI() {
+  elements.previewTitle.hidden = true;
+
+  elements.uploadActions.textContent =
+    "Upload completed";
+
+  await collapseUploadSection();
+}
+
+function collapseUploadSection() {
+  return new Promise((resolve) => {
+    const element = elements.uploadSection;
+
+    const height = element.offsetHeight;
+
+    element.style.height = `${height}px`;
+    element.style.overflow = "hidden";
+
+    requestAnimationFrame(() => {
+      element.style.height = "0px";
+      element.style.opacity = "0";
+    });
+
+    element.addEventListener(
+      "transitionend",
+      () => {
+        element.remove();
+        resolve();
+      },
+      { once: true },
+    );
+  });
+}
 
 function showResult(result) {
   elements.resultSection.hidden = false;
@@ -78,18 +114,14 @@ function init() {
       setStatus("Uploading...");
 
       try {
-        const result = await uploadGpx(
-          state.file,
-        );
+        const result = await uploadGpx(state.file);
 
         state.uploadResult = result;
 
+        await completeUploadUI();
+
         showResult(result);
-
-        setStatus(
-          "Upload completed.",
-        );
-
+        setStatus("");
       } catch (error) {
         console.error(error);
 

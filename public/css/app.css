@@ -68,6 +68,11 @@ body {
   line-height: 1.6;
 }
 
+#upload-section {
+  transition:
+    height 300ms ease,
+    opacity 300ms ease;
+}
 
 /*
  * Preview
@@ -156,6 +161,18 @@ button:disabled {
   font-size: 0.9rem;
 }
 
+.result-item-separator {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+
+  border-top: 1px solid #ccc;
+}
+
+.notice {
+  margin: 1.5rem 0;
+  font-size: 0.85rem;
+  color: #666;
+}
 
 /*
  * Status

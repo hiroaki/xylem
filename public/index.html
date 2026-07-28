@@ -54,14 +54,16 @@
       hidden
     >
 
-      <h2>Confirm your GPX</h2>
+      <h2 id="preview-title">
+        Confirm your GPX
+      </h2>
 
       <div
         id="map"
         class="map"
       ></div>
 
-      <div class="upload-actions">
+      <div id="upload-actions" class="upload-actions">
         <button
           id="upload-button"
           type="button"
@@ -77,8 +79,6 @@
       id="result-section"
       hidden
     >
-
-      <h2>Upload completed</h2>
 
       <div class="result-item">
 
@@ -104,6 +104,12 @@
         </div>
       </div>
 
+      <div class="result-item-separator">
+        <p class="notice">
+          &#x26a0; Keep the Delete Token safe.
+          It is required to delete this GPX file and will not be shown again.
+        </p>
+      </div>
 
       <div class="result-item">
 
