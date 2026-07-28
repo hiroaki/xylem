@@ -1,6 +1,7 @@
 import { Hono } from "hono";
-import { AnemochoreClient } from "../services/anemochore.js";
 import { getConfig } from "../config.js";
+import { AnemochoreClient } from "../services/anemochore.js";
+import { verifyDeleteToken } from "../utils/delete-token.js";
 
 const gpx = new Hono();
 const config = getConfig();
@@ -22,14 +23,37 @@ gpx.get("/api/gpx/:id", async (c) => {
 });
 
 gpx.delete("/api/gpx/:id", async (c) => {
-  const deleteKey = c.req.header("X-Delete-Key");
+  const deleteToken = c.req.header("X-Delete-Token");
 
-  if (!deleteKey) {
+  if (!deleteToken) {
     return c.json(
       {
-        error: "delete key is required",
+        error: "delete token is required",
       },
       400,
+    );
+  }
+
+  const payload = await verifyDeleteToken(
+    deleteToken,
+    config.xylemDeleteSecret,
+  );
+
+  if (!payload) {
+    return c.json(
+      {
+        error: "invalid delete token",
+      },
+      403,
+    );
+  }
+
+  if (payload.id !== c.req.param("id")) {
+    return c.json(
+      {
+        error: "invalid delete token",
+      },
+      403,
     );
   }
 
@@ -39,8 +63,8 @@ gpx.delete("/api/gpx/:id", async (c) => {
   );
 
   const response = await client.deleteGpx(
-    c.req.param("id"),
-    deleteKey,
+    payload.id,
+    payload.deleteKey,
   );
 
   return new Response(response.body, {

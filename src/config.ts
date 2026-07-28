@@ -3,6 +3,7 @@ export type Config = {
   anemochoreApiKey: string;
   xylemPublicOrigin: string;
   viewerUrlTemplate: string;
+  xylemDeleteSecret: string;
 };
 
 export function getConfig(): Config {
@@ -11,5 +12,6 @@ export function getConfig(): Config {
     anemochoreApiKey: process.env.ANEMOCHORE_API_KEY!,
     xylemPublicOrigin: process.env.XYLEM_PUBLIC_ORIGIN!,
     viewerUrlTemplate: process.env.VIEWER_URL_TEMPLATE!,
+    xylemDeleteSecret: process.env.XYLEM_DELETE_SECRET!,
   };
 }

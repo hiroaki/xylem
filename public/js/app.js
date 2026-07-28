@@ -19,14 +19,15 @@ const elements = {
   uploadButton: document.querySelector("#upload-button"),
 
   shareUrl: document.querySelector("#share-url"),
-  deleteKey: document.querySelector("#delete-key"),
+  deleteUrl: document.querySelector("#delete-url"),
+  deleteToken: document.querySelector("#delete-token"),
 
   statusMessage: document.querySelector("#status-message"),
 
   copyUrlButton: document.querySelector("#copy-url-button"),
-  copyDeleteKeyButton: document.querySelector("#copy-delete-key-button"),
+  copyDeleteUrlButton: document.querySelector("#copy-delete-url-button"),
+  copyDeleteTokenButton: document.querySelector("#copy-delete-token-button"),
 };
-
 
 function showPreview() {
   elements.previewSection.hidden = false;
@@ -37,7 +38,8 @@ function showResult(result) {
   elements.resultSection.hidden = false;
 
   elements.shareUrl.value = result.url;
-  elements.deleteKey.value = result.delete_key;
+  elements.deleteUrl.value = result.deleteUrl;
+  elements.deleteToken.value = result.deleteToken;
 }
 
 
@@ -113,14 +115,29 @@ function init() {
     },
   );
 
-  elements.copyDeleteKeyButton.addEventListener(
+  elements.copyDeleteUrlButton.addEventListener(
     "click",
     async () => {
       try {
         await navigator.clipboard.writeText(
-          elements.deleteKey.value,
+          elements.deleteUrl.value,
         );
-        setStatus("Copied Delete Key.");
+        setStatus("Copied Delete URL.");
+      } catch (error) {
+        console.error(error);
+        setStatus("Copy failed.");
+      }
+    },
+  );
+
+  elements.copyDeleteTokenButton.addEventListener(
+    "click",
+    async () => {
+      try {
+        await navigator.clipboard.writeText(
+          elements.deleteToken.value,
+        );
+        setStatus("Copied Delete Token.");
       } catch (error) {
         console.error(error);
         setStatus("Copy failed.");

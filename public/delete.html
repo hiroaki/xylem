@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta
+  name="viewport"
+  content="width=device-width, initial-scale=1.0"
+>
+<title>Delete GPX</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@2.0.0-alpha.1/dist/leaflet.css" />
+<link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <header class="header">
+    <h1>Delete GPX</h1>
+  </header>
+  <main class="container">
+    <section>
+      <p>
+        Enter your delete token to remove this GPX file.
+      </p>
+
+      <label for="delete-token">
+        Delete Token
+      </label>
+
+      <input
+        id="delete-token"
+        type="text"
+      >
+
+      <button
+        id="delete-button"
+        type="button"
+      >
+        Delete
+      </button>
+
+      <p id="status-message"></p>
+    </section>
+  </main>
+  <script type="module" src="/js/delete.js"></script>
+</body>
+</html>
