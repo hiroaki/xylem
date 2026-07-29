@@ -3,37 +3,35 @@ import {
   svgIconHide,
 } from "./icons.js";
 
-const params = new URLSearchParams(
-  location.search,
-);
-const id = params.get("id");
+const params = new URLSearchParams(location.search);
+const idInput = document.querySelector("#gpx-id");
+idInput.value = params.get("id") ?? "";
 
 const deleteSection = document.querySelector("#delete-section");
-
 const tokenInput = document.querySelector("#delete-token");
 const deleteButton = document.querySelector("#delete-button");
 const statusMessage = document.querySelector("#status-message");
-
 const toggleDeleteTokenButton = document.querySelector("#toggle-delete-token-button");
 
 function init() {
   deleteButton.addEventListener(
     "click",
     async () => {
+      const id = idInput.value.trim();
       const token = tokenInput.value.trim();
 
-      if (!token) {
-        statusMessage.textContent =
-          "Delete token is required.";
+      if (!id) {
+        statusMessage.textContent = "GPX ID is required.";
+        return;
+      }
 
+      if (!token) {
+        statusMessage.textContent = "Delete token is required.";
         return;
       }
 
       deleteButton.disabled = true;
-
-      statusMessage.textContent =
-        "Deleting...";
-
+      statusMessage.textContent = "Deleting...";
       const response = await fetch(
         `/api/gpx/${id}`,
         {
@@ -46,29 +44,23 @@ function init() {
 
       if (response.ok) {
         deleteSection.hidden = true;
-
-        statusMessage.textContent =
-          "This GPX file has been deleted.";
-
+        statusMessage.textContent = "This GPX file has been deleted.";
       } else if (
         response.status === 404 ||
         response.status === 410
       ) {
         statusMessage.textContent =
-          "This GPX file has already been deleted or cannot be found.\nPlease check that the delete page URL is correct.";
-
+          "This GPX file has already been deleted or cannot be found. Please check that the GPX ID is correct.";
         deleteButton.disabled = true;
-
-      } else if (response.status === 403) {
+      } else if (
+        response.status === 403
+      ) {
         statusMessage.textContent =
           "Unable to delete this GPX file.\nPlease check that the delete token is correct and try again.";
-
         deleteButton.disabled = false;
-
       } else {
         statusMessage.textContent =
           "An unexpected error occurred.";
-
         deleteButton.disabled = false;
       }
     },
@@ -81,10 +73,7 @@ function init() {
 
       if (visible) {
         tokenInput.type = "password";
-
-        toggleDeleteTokenButton.innerHTML =
-          svgIconShow();
-
+        toggleDeleteTokenButton.innerHTML = svgIconShow();
         toggleDeleteTokenButton.setAttribute(
           "aria-label",
           "Show delete token",
@@ -92,10 +81,7 @@ function init() {
 
       } else {
         tokenInput.type = "text";
-
-        toggleDeleteTokenButton.innerHTML =
-          svgIconHide();
-
+        toggleDeleteTokenButton.innerHTML = svgIconHide();
         toggleDeleteTokenButton.setAttribute(
           "aria-label",
           "Hide delete token",

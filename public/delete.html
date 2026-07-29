@@ -19,14 +19,26 @@
       <h2>Delete GPX</h2>
 
       <p>
-        Enter your delete token to remove this GPX file.
+        Enter the GPX ID and delete token to remove this GPX file.
       </p>
+
+      <div class="result-item">
+        <label for="gpx-id">
+          GPX ID
+        </label>
+        <div class="copy-field">
+          <input
+            id="gpx-id"
+            type="text"
+            autocomplete="off"
+          >
+        </div>
+      </div>
 
       <div class="result-item">
         <label for="delete-token">
           Delete Token
         </label>
-
         <div class="copy-field">
           <div class="secret-input-wrapper">
             <input
@@ -46,6 +58,7 @@
       <div class="upload-actions">
         <button
           id="delete-button"
+          type="button"
         >
           Delete
         </button>
