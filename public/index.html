@@ -6,7 +6,6 @@
   name="viewport"
   content="width=device-width, initial-scale=1.0"
 >
-
 <title>Xylem - GPX Upload</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@2.0.0-alpha.1/dist/leaflet.css" />
 <link rel="stylesheet" href="/css/app.css">
@@ -20,49 +19,37 @@
 </script>
 </head>
 <body>
-
   <header class="header">
     <h1>Xylem</h1>
   </header>
 
   <main class="container">
-
     <section id="upload-section">
       <label
         id="drop-zone"
         class="drop-zone"
       >
-
         <span class="drop-zone-message">
           Drop a GPX file here<br>
           or click to select
         </span>
-
         <input
           id="file-input"
           type="file"
           accept=".gpx,application/gpx+xml"
           hidden
         >
-
       </label>
     </section>
 
-
-    <section
-      id="preview-section"
-      hidden
-    >
-
+    <section id="preview-section" hidden>
       <h2 id="preview-title">
         Confirm your GPX
       </h2>
-
       <div
         id="map"
         class="map"
       ></div>
-
       <div id="upload-actions" class="upload-actions">
         <button
           id="upload-button"
@@ -71,36 +58,27 @@
           Upload
         </button>
       </div>
-
     </section>
 
-
-    <section
-      id="result-section"
-      hidden
-    >
-
+    <section id="result-section" hidden>
       <div class="result-item">
-
         <label>
           Share URL
         </label>
-
         <div class="copy-field">
-
           <input
             id="share-url"
             type="text"
             readonly
           >
-
-          <button
-            id="copy-url-button"
-            type="button"
-          >
-            Copy
-          </button>
-
+          <span class="copy-button-wrapper">
+            <button
+              id="copy-share-url-button"
+              type="button"
+              aria-label="Copy share URL"
+            ></button>
+            <span class="copy-message"></span>
+          </span>
         </div>
       </div>
 
@@ -112,54 +90,57 @@
       </div>
 
       <div class="result-item">
-
         <label>
           Delete Page URL
         </label>
-
         <div class="copy-field">
-
           <input
             id="delete-url"
             type="text"
             readonly
           >
-
-          <button
-            id="copy-delete-url-button"
-            type="button"
-          >
-            Copy
-          </button>
-
+          <span class="copy-button-wrapper">
+            <button
+              id="copy-delete-url-button"
+              type="button"
+              aria-label="Copy delete URL"
+            ></button>
+            <span class="copy-message"></span>
+          </span>
         </div>
       </div>
 
       <div class="result-item">
-
         <label>
           Delete Token
         </label>
-
         <div class="copy-field">
-
-          <input
-            id="delete-token"
-            type="text"
-            readonly
-          >
-
-          <button
-            id="copy-delete-token-button"
-            type="button"
-          >
-            Copy
-          </button>
-
+          <div class="secret-input-wrapper">
+            <input
+              id="delete-token"
+              type="password"
+              readonly
+              autocomplete="off"
+            >
+            <button
+              id="toggle-delete-token-button"
+              type="button"
+              aria-label="Show delete token"
+            >
+              <!-- icon inserted by JavaScript -->
+            </button>
+          </div>
+          <span class="copy-button-wrapper">
+            <button
+              id="copy-delete-token-button"
+              type="button"
+              aria-label="Copy delete token"
+            ></button>
+            <span class="copy-message"></span>
+          </span>
         </div>
       </div>
     </section>
-
 
     <section
       id="status-section"
@@ -167,13 +148,8 @@
     >
       <p id="status-message"></p>
     </section>
-
   </main>
 
-  <script
-    type="module"
-    src="/js/app.js"
-  ></script>
-
+  <script type="module" src="/js/app.js"></script>
 </body>
 </html>

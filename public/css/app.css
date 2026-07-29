@@ -145,6 +145,7 @@ button:disabled {
 
 .copy-field {
   display: flex;
+  align-items: center;
   gap: 0.5rem;
 }
 
@@ -159,13 +160,59 @@ button:disabled {
   border-radius: 6px;
 
   font-size: 0.9rem;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.copy-button-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.copy-field > button,
+.copy-button-wrapper button {
+  min-height: 44px;
+  width: 44px;
+
+  padding: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.copy-field button svg {
+  width: 20px;
+  height: 20px;
+}
+
+.copy-field button {
+  background: transparent;
+  color: #555;
+}
+
+.copy-field button:hover {
+  background: #f0f0f0;
+}
+
+.copy-message {
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+
+  margin-bottom: 0.25rem;
+
+  font-size: 0.75rem;
+  color: #666;
+
+  white-space: nowrap;
 }
 
 .result-item-separator {
   margin-top: 1.5rem;
   padding-top: 1.5rem;
-
-  border-top: 1px solid #ccc;
 }
 
 .notice {
@@ -174,6 +221,42 @@ button:disabled {
   color: #666;
 }
 
+.secret-input-wrapper {
+  position: relative;
+  flex: 1;
+}
+
+.secret-input-wrapper input {
+  width: 100%;
+  padding-right: 3rem;
+}
+
+.secret-input-wrapper button {
+  position: absolute;
+
+  right: 0.8rem;
+  top: 50%;
+
+  transform: translateY(-50%);
+
+  padding: 0;
+
+  border: none;
+  background: transparent;
+
+  color: #999;
+
+  cursor: pointer;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.secret-input-wrapper button svg {
+  width: 24px;
+  height: 24px;
+}
 /*
  * Status
  */
