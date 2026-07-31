@@ -7,35 +7,68 @@
   content="width=device-width, initial-scale=1.0"
 >
 <title>Delete GPX</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@2.0.0-alpha.1/dist/leaflet.css" />
 <link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
   <header class="header">
-    <h1>Delete GPX</h1>
+    <h1>Xylem</h1>
   </header>
+
   <main class="container">
-    <section>
+    <section id="delete-section">
+      <h2>Delete GPX</h2>
+
       <p>
-        Enter your delete token to remove this GPX file.
+        Enter the GPX ID and delete token to remove this GPX file.
       </p>
 
-      <label for="delete-token">
-        Delete Token
-      </label>
+      <div class="result-item">
+        <label for="gpx-id">
+          GPX ID
+        </label>
+        <div class="copy-field">
+          <input
+            id="gpx-id"
+            type="text"
+            autocomplete="off"
+          >
+        </div>
+      </div>
 
-      <input
-        id="delete-token"
-        type="text"
-      >
+      <div class="result-item">
+        <label for="delete-token">
+          Delete Token
+        </label>
+        <div class="copy-field">
+          <div class="secret-input-wrapper">
+            <input
+              id="delete-token"
+              type="password"
+              autocomplete="off"
+            >
+            <button
+              id="toggle-delete-token-button"
+              type="button"
+              aria-label="Show delete token"
+            ></button>
+          </div>
+        </div>
+      </div>
 
-      <button
-        id="delete-button"
-        type="button"
-      >
-        Delete
-      </button>
+      <div class="upload-actions">
+        <button
+          id="delete-button"
+          type="button"
+        >
+          Delete
+        </button>
+      </div>
+    </section>
 
+    <section
+      id="status-section"
+      aria-live="polite"
+    >
       <p id="status-message"></p>
     </section>
   </main>
