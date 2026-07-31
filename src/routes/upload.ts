@@ -1,7 +1,6 @@
 import { Hono } from "hono";
 import { getConfig } from "../config.js";
 import { AnemochoreClient } from "../services/anemochore.js";
-import { buildViewerUrl } from "../utils/viewer-url.js";
 import { createDeleteToken } from "../utils/delete-token.js";
 import { buildDeleteUrl } from "../utils/delete-url.js";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -30,14 +29,9 @@ upload.post("/api/upload", async (c) => {
   const data = await response.json();
 
   if (data.url) {
-    const publicUrl = rewritePublicUrl(
+    data.url = rewritePublicUrl(
       data.url,
       getAnemochorePublicOrigin(),
-    );
-
-    data.url = buildViewerUrl(
-      config.viewerUrlTemplate,
-      publicUrl,
     );
   }
 

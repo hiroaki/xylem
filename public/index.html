@@ -31,6 +31,11 @@
       <h2>Upload Result</h2>
 
       <div class="result-item">
+        <label for="gpx-id">GPX ID</label>
+        <input id="gpx-id" type="text" readonly>
+      </div>
+
+      <div class="result-item">
         <label for="gpx-url">GPX URL</label>
         <input id="gpx-url" type="text" readonly>
       </div>
@@ -94,6 +99,7 @@ uploadButton.addEventListener(
       uploadButton.textContent = "Uploaded";
 
       const data = await response.json();
+      document.querySelector("#gpx-id").value = data.id;
       document.querySelector("#gpx-url").value = data.url;
       document.querySelector("#delete-url").value = data.deleteUrl;
       document.querySelector("#delete-token").value = data.deleteToken;
