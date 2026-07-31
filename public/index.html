@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta
+  name="viewport"
+  content="width=device-width, initial-scale=1.0"
+>
+<title>Xylem - GPX Upload Example</title>
+</head>
+<body>
+  <header class="header">
+    <h1>Xylem - GPX Upload Example</h1>
+  </header>
+
+  <main class="container">
+    <section id="upload-section">
+      <h2>Upload GPX</h2>
+      <p>
+        Select a GPX file to upload.
+      </p>
+
+      <input id="file-input" type="file" accept=".gpx,application/gpx+xml">
+
+      <button id="upload-button" type="button">
+        Upload
+      </button>
+    </section>
+
+    <section id="result-section" hidden>
+      <h2>Upload Result</h2>
+
+      <div class="result-item">
+        <label for="gpx-url">GPX URL</label>
+        <input id="gpx-url" type="text" readonly>
+      </div>
+
+      <div class="result-item">
+        <label for="delete-url">Delete URL</label>
+        <input id="delete-url" type="text" readonly>
+      </div>
+
+      <div class="result-item">
+        <label for="delete-token">Delete Token</label>
+        <input id="delete-token" type="text" readonly>
+      </div>
+    </section>
+
+    <section id="status-section">
+      <p id="status-message"></p>
+    </section>
+  </main>
+<script type="module">
+// API endpoint.
+// For a separate frontend deployment, set this to the full API URL.
+// Example: https://example.com/api
+const API_BASE = "/api";
+
+function setStatus(message) {
+  document.querySelector("#status-message").textContent = message;
+}
+
+const uploadButton = document.querySelector("#upload-button");
+uploadButton.addEventListener(
+  "click",
+  async () => {
+    const file = document.querySelector("#file-input").files[0];
+
+    if (!file) {
+      setStatus("Please select a GPX file.");
+      return;
+    }
+
+    uploadButton.disabled = true;
+    setStatus("Uploading...");
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const response = await fetch(
+        `${API_BASE}/upload`,
+        {
+          method: "POST",
+          body: formData,
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(`Upload failed (${response.status})`);
+      }
+
+      setStatus("Upload completed.");
+      uploadButton.textContent = "Uploaded";
+
+      const data = await response.json();
+      document.querySelector("#gpx-url").value = data.url;
+      document.querySelector("#delete-url").value = data.deleteUrl;
+      document.querySelector("#delete-token").value = data.deleteToken;
+
+      document.querySelector("#result-section").hidden = false;
+    } catch (error) {
+      console.error(error);
+      setStatus(error.message);
+    }
+  }
+);
+  </script>
+</body>
+</html>

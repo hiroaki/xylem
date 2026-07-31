@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta
+  name="viewport"
+  content="width=device-width, initial-scale=1.0"
+>
+<title>Xylem - GPX Delete Example</title>
+</head>
+<body>
+  <header class="header">
+    <h1>Xylem - GPX Delete Example</h1>
+  </header>
+
+  <main class="container">
+    <section id="delete-section">
+      <h2>Delete GPX</h2>
+      <p>
+        Enter the GPX ID and Delete Token to remove your uploaded file.
+      </p>
+
+      <div class="input-item">
+        <label for="gpx-id">GPX ID</label>
+        <input id="gpx-id" type="text" autocomplete="off">
+      </div>
+
+      <div class="input-item">
+        <label for="delete-token">Delete Token</label>
+        <input id="delete-token" type="text" autocomplete="off">
+      </div>
+
+      <div class="upload-actions">
+        <button id="delete-button" type="button">Delete</button>
+      </div>
+    </section>
+
+    <section id="status-section">
+      <p id="status-message"></p>
+    </section>
+  </main>
+
+<script type="module">
+// API endpoint.
+// For a separate frontend deployment, set this to the full API URL.
+// Example: https://example.com/api
+const API_BASE = "/api";
+
+function setStatus(message) {
+  document.querySelector("#status-message").textContent = message;
+}
+
+const deleteButton = document.querySelector("#delete-button");
+deleteButton.addEventListener(
+  "click",
+  async () => {
+    const id = document.querySelector("#gpx-id").value.trim();
+    const token = document.querySelector("#delete-token").value.trim();
+
+    if (!id) {
+      setStatus("GPX ID is required.");
+      return;
+    }
+
+    if (!token) {
+      setStatus("Delete token is required.");
+      return;
+    }
+
+    deleteButton.disabled = true;
+    setStatus("Deleting...");
+    try {
+      const response = await fetch(
+        `${API_BASE}/gpx/${id}`,
+        {
+          method: "DELETE",
+          headers: {
+            "X-Delete-Token": token,
+          }
+        }
+      );
+
+      if (response.ok) {
+        setStatus("Deleted successfully.");
+        deleteButton.textContent = "Deleted";
+        return;
+      }
+
+      if (
+        response.status === 404 ||
+        response.status === 410
+      ) {
+        setStatus("This GPX file has already been deleted or cannot be found.");
+      } else {
+        setStatus("Delete failed. Please check your GPX ID and Delete Token and try again.");
+        deleteButton.disabled = false;
+      }
+    } catch (error) {
+      console.error(error);
+      setStatus("An error occurred while trying to delete the GPX file.");
+    }
+  }
+);
+</script>
+</body>
+</html>
