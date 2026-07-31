@@ -19,10 +19,15 @@ const elements = {
   previewSection: document.querySelector("#preview-section"),
   resultSection: document.querySelector("#result-section"),
 
+  dropZone: document.querySelector("#drop-zone"),
+  dropZoneMessage: document.querySelector(".drop-zone-message"),
+  fileInput: document.querySelector("#file-input"),
+
   map: document.querySelector("#map"),
 
   previewTitle: document.querySelector("#preview-title"),
   uploadActions: document.querySelector("#upload-actions"),
+  placeholderUploadFilename: document.querySelector("#placeholder-upload-filename"),
 
   uploadButton: document.querySelector("#upload-button"),
 
@@ -40,42 +45,43 @@ const elements = {
   copyMessages: document.querySelectorAll(".copy-message"),
 };
 
-function showPreview() {
+async function showPreview() {
   elements.previewSection.hidden = false;
-}
 
-async function completeUploadUI() {
-  elements.previewTitle.hidden = true;
+  await new Promise((resolve) => {
+    const map = elements.map;
 
-  elements.uploadActions.textContent =
-    "Upload completed";
-
-  await collapseUploadSection();
-}
-
-function collapseUploadSection() {
-  return new Promise((resolve) => {
-    const element = elements.uploadSection;
-
-    const height = element.offsetHeight;
-
-    element.style.height = `${height}px`;
-    element.style.overflow = "hidden";
-
-    requestAnimationFrame(() => {
-      element.style.height = "0px";
-      element.style.opacity = "0";
-    });
-
-    element.addEventListener(
+    map.addEventListener(
       "transitionend",
-      () => {
-        element.remove();
-        resolve();
+      (event) => {
+        if (event.propertyName === "height") {
+          resolve();
+        }
       },
       { once: true },
     );
+
+    requestAnimationFrame(() => {
+      map.classList.add("expanded");
+    });
   });
+
+  const tiliaApp = setupTiliaApp(elements.map);
+  await tiliaApp.load(state.file);
+}
+
+function completeUploadUI() {
+  // elements.previewTitle.hidden = true;
+
+  elements.uploadActions.textContent =
+    "\u{1f389} Upload completed!";
+
+  elements.fileInput.disabled = true;
+  elements.dropZone.classList.add("completed");
+
+  elements.dropZoneMessage.innerHTML =
+    "Upload completed.<br>" +
+    "Reload this page to upload another GPX file.";
 }
 
 function showResult(result) {
@@ -84,11 +90,20 @@ function showResult(result) {
   elements.shareUrl.value = result.url;
   elements.deleteUrl.value = result.deleteUrl;
   elements.deleteToken.value = result.deleteToken;
+
+  elements.resultSection.scrollIntoView({
+    behavior: "smooth",
+    block: "start",
+  });
 }
 
 
 function setStatus(message) {
   elements.statusMessage.textContent = message;
+}
+
+function setUploadFilename(filename) {
+  elements.placeholderUploadFilename.textContent = filename;
 }
 
 function showCopyMessage(button, message) {
@@ -131,11 +146,14 @@ function init() {
     onFileSelected: async (file) => {
       state.file = file;
 
-      showPreview();
-      const tiliaApp = setupTiliaApp(elements.map);
-      await tiliaApp.load(file);
+      await showPreview();
 
-      setStatus(`Selected: ${file.name}`);
+      elements.previewTitle.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+
+      setUploadFilename(file.name);
     },
     onError: (message) => {
       setStatus(message);
@@ -149,7 +167,6 @@ function init() {
         return;
       }
 
-
       setStatus("Uploading...");
 
       try {
@@ -157,7 +174,7 @@ function init() {
 
         state.uploadResult = result;
 
-        await completeUploadUI();
+        completeUploadUI();
 
         showResult(result);
         setStatus("");
