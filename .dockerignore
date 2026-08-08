@@ -1,7 +1,39 @@
+# Dependencies
 node_modules
+
+# npm logs
 npm-debug.log
+npm-debug.log.*
+
+# Git
 .git
 .gitignore
-Dockerfile
+
+# Environment files
+.env
+.env.*
+
+# Development files
 compose.yml
 
+# Build output
+dist
+
+# Temporary files
+tmp
+log
+logs
+
+# Test output
+coverage
+.nyc_output
+
+# Editor / OS files
+.DS_Store
+.idea
+.vscode
+*.swp
+*.swo
+
+# Docker files not needed inside image context
+Dockerfile
