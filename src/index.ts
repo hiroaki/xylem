@@ -5,18 +5,19 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import upload from "./routes/upload.js";
 import gpx from "./routes/gpx.js";
 import health from "./routes/health.js";
+import { getConfig } from "./config.js";
 
 const app = new Hono();
+const config = getConfig();
 
 app.route("/", upload);
 app.route("/", gpx);
 app.route("/", health);
 
-
 app.use(
   "/*",
   serveStatic({
-    root: "./public",
+    root: config.xylemStaticDir,
   }),
 );
 
