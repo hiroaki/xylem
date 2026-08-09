@@ -4,7 +4,7 @@ import { AnemochoreClient } from "../services/anemochore.js";
 import { createDeleteToken } from "../utils/delete-token.js";
 import { buildDeleteUrl } from "../utils/delete-url.js";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { getPublicOrigin, getAnemochorePublicOrigin } from "../utils/public-origin.js";
+import { getPublicOrigin } from "../utils/public-origin.js";
 
 const upload = new Hono();
 const config = getConfig();
@@ -31,7 +31,7 @@ upload.post("/api/upload", async (c) => {
   if (data.url) {
     data.url = rewritePublicUrl(
       data.url,
-      getAnemochorePublicOrigin(),
+      getPublicOrigin(c),
     );
   }
 
