@@ -9,6 +9,10 @@ import {
   emitAuditEvent,
   resultFromStatus,
 } from "../logging/audit-event.js";
+import {
+  buildAnemochoreUnreachableError,
+  getSafeNetworkErrorDetails,
+} from "../logging/anemochore-error.js";
 
 const upload = new Hono();
 const config = getConfig();
@@ -40,13 +44,46 @@ upload.post("/api/upload", async (c) => {
     config.anemochoreApiKey,
   );
 
-  const response = await client.upload(file);
+  let response: Response;
+
+  try {
+    response = await client.upload(file);
+  } catch (error) {
+    const errorDetails = getSafeNetworkErrorDetails(error);
+
+    emitAuditEvent(c, {
+      event: "anemochore_upload_requested",
+      result: "failure",
+      failure_reason: "anemochore_unreachable",
+      error_message: errorDetails.error_message,
+      error_code: errorDetails.error_code,
+    });
+
+    emitAuditEvent(c, {
+      event: "gpx_stored",
+      result: "failure",
+      failure_reason: "anemochore_unreachable",
+      error_message: errorDetails.error_message,
+      error_code: errorDetails.error_code,
+    });
+
+    throw buildAnemochoreUnreachableError(
+      "upload",
+      errorDetails.error_code,
+    );
+  }
+
   const data = await response.json();
+
+  const uploadResult = resultFromStatus(response.status);
 
   emitAuditEvent(c, {
     event: "anemochore_upload_requested",
-    result: resultFromStatus(response.status),
+    result: uploadResult,
     status: response.status,
+    ...(uploadResult === "failure"
+      ? { failure_reason: "anemochore_rejected" as const }
+      : {}),
   });
 
   if (data.url) {
@@ -61,6 +98,9 @@ upload.post("/api/upload", async (c) => {
       event: "gpx_stored",
       result: "failure",
       status: response.status,
+      ...(uploadResult === "failure"
+        ? { failure_reason: "anemochore_rejected" as const }
+        : {}),
     });
 
     throw new Error(
@@ -70,9 +110,12 @@ upload.post("/api/upload", async (c) => {
 
   emitAuditEvent(c, {
     event: "gpx_stored",
-    result: resultFromStatus(response.status),
+    result: uploadResult,
     status: response.status,
     gpx_id: data.id,
+    ...(uploadResult === "failure"
+      ? { failure_reason: "anemochore_rejected" as const }
+      : {}),
   });
 
   data.deleteToken = await createDeleteToken(

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { BaseLogger } from "@hono/structured-logger";
 import type { Hono } from "hono";
+import { createDeleteToken } from "../src/utils/delete-token.js";
 
 type LogEntry = {
   level: "info" | "warn" | "error" | "debug";
@@ -54,6 +55,18 @@ function createMemoryLogger(entries: LogEntry[]): BaseLogger {
   };
 }
 
+function buildUploadFormData(): FormData {
+  const formData = new FormData();
+  formData.append(
+    "file",
+    new File(["<gpx></gpx>"], "sample.gpx", {
+      type: "application/gpx+xml",
+    }),
+  );
+
+  return formData;
+}
+
 async function setupApp(options?: {
   trustProxy?: boolean;
 }): Promise<{
@@ -94,6 +107,93 @@ beforeEach(() => {
 });
 
 describe("audit logging", () => {
+  it("records upload rejected failures with failure_reason anemochore_rejected", async () => {
+    const { app, entries } = await setupApp();
+    const fetchMock = vi.mocked(globalThis.fetch);
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          error: "unauthorized",
+        }),
+        {
+          status: 401,
+          headers: {
+            "content-type": "application/json",
+          },
+        },
+      ),
+    );
+
+    const res = await app.request(
+      "http://localhost/api/upload",
+      {
+        method: "POST",
+        body: buildUploadFormData(),
+      },
+    );
+
+    expect(res.status).toBe(500);
+
+    const anemochoreEvent = entries.find((entry) =>
+      entry.obj.event === "anemochore_upload_requested" &&
+      entry.obj.result === "failure"
+    );
+    const storedEvent = entries.find((entry) =>
+      entry.obj.event === "gpx_stored" &&
+      entry.obj.result === "failure"
+    );
+
+    expect(anemochoreEvent?.obj.status).toBe(401);
+    expect(anemochoreEvent?.obj.failure_reason).toBe("anemochore_rejected");
+    expect(storedEvent?.obj.status).toBe(401);
+    expect(storedEvent?.obj.failure_reason).toBe("anemochore_rejected");
+  });
+
+  it("records upload unreachable failures with failure_reason anemochore_unreachable", async () => {
+    const { app, entries } = await setupApp();
+    const fetchMock = vi.mocked(globalThis.fetch);
+
+    const upstreamError = new Error("fetch failed");
+    Object.assign(upstreamError, {
+      cause: {
+        code: "ECONNREFUSED",
+      },
+    });
+
+    fetchMock.mockRejectedValueOnce(upstreamError);
+
+    const res = await app.request(
+      "http://localhost/api/upload",
+      {
+        method: "POST",
+        body: buildUploadFormData(),
+      },
+    );
+
+    expect(res.status).toBe(500);
+
+    const anemochoreEvent = entries.find((entry) =>
+      entry.obj.event === "anemochore_upload_requested" &&
+      entry.obj.result === "failure"
+    );
+    const storedEvent = entries.find((entry) =>
+      entry.obj.event === "gpx_stored" &&
+      entry.obj.result === "failure"
+    );
+    const responseEvent = entries.find((entry) =>
+      entry.obj.event === "response_sent" &&
+      entry.obj.status === 500 &&
+      entry.level === "error"
+    );
+
+    expect(anemochoreEvent?.obj.failure_reason).toBe("anemochore_unreachable");
+    expect(anemochoreEvent?.obj.error_code).toBe("ECONNREFUSED");
+    expect(storedEvent?.obj.failure_reason).toBe("anemochore_unreachable");
+    expect(storedEvent?.obj.error_code).toBe("ECONNREFUSED");
+    expect(responseEvent?.obj.error_message).toContain("ECONNREFUSED");
+  });
+
   it("assigns server-side request IDs and does not accept client-supplied X-Request-Id", async () => {
     const { app, entries } = await setupApp();
     const fetchMock = vi.mocked(globalThis.fetch);
@@ -156,6 +256,12 @@ describe("audit logging", () => {
 
     const anemochoreFailure = entries.find((entry) =>
       entry.obj.event === "anemochore_gpx_fetched" &&
+      entry.obj.failure_reason === "anemochore_rejected" &&
+      entry.obj.result === "failure"
+    );
+    const anemochoreUnreachable = entries.find((entry) =>
+      entry.obj.event === "anemochore_gpx_fetched" &&
+      entry.obj.failure_reason === "anemochore_unreachable" &&
       entry.obj.result === "failure"
     );
     const responseSentFromUpstreamFailure = entries.find((entry) =>
@@ -170,8 +276,49 @@ describe("audit logging", () => {
     );
 
     expect(anemochoreFailure?.obj.status).toBe(503);
+    expect(anemochoreFailure?.obj.failure_reason).toBe("anemochore_rejected");
+    expect(anemochoreUnreachable?.obj.error_message).toContain("upstream connection failed");
     expect(responseSentFromUpstreamFailure?.obj.result).toBe("failure");
     expect(responseSentFromException?.obj.result).toBe("failure");
+  });
+
+  it("records deletion unreachable failures as anemochore_gpx_deleted failure events", async () => {
+    const { app, entries } = await setupApp();
+    const fetchMock = vi.mocked(globalThis.fetch);
+
+    const upstreamError = new Error("fetch failed");
+    Object.assign(upstreamError, {
+      code: "ETIMEDOUT",
+    });
+    fetchMock.mockRejectedValueOnce(upstreamError);
+
+    const deleteToken = await createDeleteToken(
+      {
+        id: "gpx-401",
+        deleteKey: "dk-test",
+      },
+      "TEST_XYLEM_DELETE_SECRET",
+    );
+
+    const res = await app.request(
+      "http://localhost/api/gpx/gpx-401",
+      {
+        method: "DELETE",
+        headers: {
+          "X-Delete-Token": deleteToken,
+        },
+      },
+    );
+
+    expect(res.status).toBe(500);
+
+    const deletionEvent = entries.find((entry) =>
+      entry.obj.event === "anemochore_gpx_deleted" &&
+      entry.obj.result === "failure"
+    );
+
+    expect(deletionEvent?.obj.failure_reason).toBe("anemochore_unreachable");
+    expect(deletionEvent?.obj.error_code).toBe("ETIMEDOUT");
   });
 
   it("does not write delete tokens or secrets to audit logs", async () => {
