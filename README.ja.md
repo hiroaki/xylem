@@ -159,9 +159,24 @@ Xylem は以下を使った構造化 JSON 監査ログを出力します。
 
 - 監査ミドルウェアは業務ルート（`/api/upload`, `/api/gpx/*`）にのみ適用されます。
 - 静的ファイルへのリクエストは監査イベントの対象外です。
-- ルートハンドラーは業務監査イベントを出力します（例: `upload_received`, `anemochore_upload_completed`, `gpx_stored`, `gpx_retrieval_requested`, `anemochore_gpx_fetched`, `gpx_deletion_requested`, `gpx_deletion_rejected`, `anemochore_gpx_deleted`）。
 - 失敗イベントでは `failure_reason`（`anemochore_rejected`, `anemochore_unreachable`, `anemochore_invalid_response`）を明示します。
 - ログレベルは監査結果に応じて決定します（`success` -> `info`, `failure` -> `error`）。
+
+#### 実際に出力する監査イベント
+
+| イベント | 出力元 | 意味 |
+| --- | --- | --- |
+| `request_received` | ミドルウェア | 監査対象リクエストを Xylem が受信した時点で出力。 |
+| `response_sent` | ミドルウェア | 監査対象リクエストに対するレスポンス送信時に出力。 |
+| `upload_rejected` | upload ルート | upstream 呼び出し前にアップロードをローカル拒否（例: file 欠落）。 |
+| `upload_received` | upload ルート | アップロード本文を受理し、upstream 連携へ進めたことを記録。 |
+| `anemochore_upload_completed` | upload ルート | upstream へのアップロード処理の完了結果（成功/拒否/到達不能）。 |
+| `gpx_stored` | upload ルート | Xylem 観点での GPX 保存処理の最終結果。 |
+| `gpx_retrieval_requested` | gpx ルート | GPX 取得リクエストを受理し、処理開始したことを記録。 |
+| `anemochore_gpx_fetched` | gpx ルート | upstream の GPX 取得結果（成功/拒否/到達不能）。 |
+| `gpx_deletion_requested` | gpx ルート | GPX 削除リクエストを受理し、トークン検証を開始。 |
+| `gpx_deletion_rejected` | gpx ルート | GPX 削除をローカル拒否（トークン欠落/不正）。 |
+| `anemochore_gpx_deleted` | gpx ルート | upstream の GPX 削除結果（成功/拒否/到達不能）。 |
 
 
 ## API 仕様

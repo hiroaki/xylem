@@ -159,9 +159,24 @@ Audit logs are designed to avoid writing sensitive values such as:
 
 - Audit middleware is applied only to business routes (`/api/upload`, `/api/gpx/*`).
 - Requests for static files are intentionally excluded from audit events.
-- Route handlers emit business audit events (for example `upload_received`, `anemochore_upload_completed`, `gpx_stored`, `gpx_retrieval_requested`, `anemochore_gpx_fetched`, `gpx_deletion_requested`, `gpx_deletion_rejected`, `anemochore_gpx_deleted`).
 - Failure events use explicit `failure_reason` values (`anemochore_rejected`, `anemochore_unreachable`, `anemochore_invalid_response`).
 - Log level is derived from audit result (`success` -> `info`, `failure` -> `error`).
+
+#### Actual audit events
+
+| Event | Source | Meaning |
+| --- | --- | --- |
+| `request_received` | middleware | Logged when an audited HTTP request enters Xylem. |
+| `response_sent` | middleware | Logged when Xylem sends a response for an audited request. |
+| `upload_rejected` | upload route | Upload request was rejected locally before upstream call (for example missing file). |
+| `upload_received` | upload route | Upload request payload was accepted for upstream processing. |
+| `anemochore_upload_completed` | upload route | Upstream upload finished (success, rejected response, or unreachable upstream). |
+| `gpx_stored` | upload route | Final GPX store outcome from Xylem's perspective. |
+| `gpx_retrieval_requested` | gpx route | GPX retrieval request accepted and forwarded workflow started. |
+| `anemochore_gpx_fetched` | gpx route | Upstream GPX retrieval finished (success, rejected response, or unreachable upstream). |
+| `gpx_deletion_requested` | gpx route | GPX deletion request accepted and token validation started. |
+| `gpx_deletion_rejected` | gpx route | GPX deletion request rejected locally (missing/invalid token). |
+| `anemochore_gpx_deleted` | gpx route | Upstream GPX deletion finished (success, rejected response, or unreachable upstream). |
 
 
 ## API Specification
