@@ -1,8 +1,8 @@
-import type { Logger } from "pino";
+import type { BaseLogger } from "@hono/structured-logger";
 
 declare module "hono" {
   interface ContextVariableMap {
-    logger: Logger;
+    logger: BaseLogger;
     clientIp: string | undefined;
   }
 }

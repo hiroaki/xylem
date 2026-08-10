@@ -1,12 +1,58 @@
 import { structuredLogger } from "@hono/structured-logger";
+import type { BaseLogger } from "@hono/structured-logger";
 
 import type { Context, MiddlewareHandler } from "hono";
 
-import { rootLogger } from "../logging/root-logger.js";
+import { getRootLogger } from "../logging/root-logger.js";
 import { resultFromStatus } from "../logging/audit-event.js";
 
+type BoundLogger = BaseLogger & {
+  child?: (bindings: Record<string, unknown>) => BoundLogger;
+};
+
+function bindLogger(
+  logger: BaseLogger,
+  bindings: Record<string, unknown>,
+): BaseLogger {
+  const candidate = logger as BoundLogger;
+  if (typeof candidate.child === "function") {
+    return candidate.child(bindings);
+  }
+
+  const mergePayload = (obj: unknown) => {
+    if (typeof obj === "object" && obj !== null) {
+      return {
+        ...bindings,
+        ...(obj as Record<string, unknown>),
+      };
+    }
+
+    return {
+      ...bindings,
+      value: obj,
+    };
+  };
+
+  return {
+    info: (obj, msg, ...args) => {
+      logger.info(mergePayload(obj), msg, ...args);
+    },
+    warn: (obj, msg, ...args) => {
+      logger.warn(mergePayload(obj), msg, ...args);
+    },
+    error: (obj, msg, ...args) => {
+      logger.error(mergePayload(obj), msg, ...args);
+    },
+    debug: (obj, msg, ...args) => {
+      logger.debug(mergePayload(obj), msg, ...args);
+    },
+  };
+}
+
 function createRequestLogger(c: Context) {
-  return rootLogger.child({
+  const logger = getRootLogger();
+
+  return bindLogger(logger, {
     service: "xylem",
     request_id: c.var.requestId,
     ...(c.var.clientIp ? { client_ip: c.var.clientIp } : {}),

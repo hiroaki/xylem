@@ -1,10 +1,29 @@
 import pino from "pino";
+import type { BaseLogger } from "@hono/structured-logger";
 
 import { getConfig } from "../config.js";
 
-const config = getConfig();
+function createDefaultRootLogger() {
+  const config = getConfig();
 
-export const rootLogger = pino({
-  level: config.logLevel,
-  base: undefined,
-});
+  return pino({
+    level: config.logLevel,
+    base: undefined,
+  });
+}
+
+let rootLogger: BaseLogger = createDefaultRootLogger();
+
+export function getRootLogger(): BaseLogger {
+  return rootLogger;
+}
+
+export function setRootLoggerForTesting(
+  logger: BaseLogger,
+) {
+  rootLogger = logger;
+}
+
+export function resetRootLoggerForTesting() {
+  rootLogger = createDefaultRootLogger();
+}

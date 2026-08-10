@@ -39,9 +39,13 @@ export const clientIpMiddleware: MiddlewareHandler = async (
   }
 
   if (!clientIp) {
-    const connInfo = getConnInfo(c);
-    if (connInfo.remote.address && isIP(connInfo.remote.address) !== 0) {
-      clientIp = connInfo.remote.address;
+    try {
+      const connInfo = getConnInfo(c);
+      if (connInfo.remote.address && isIP(connInfo.remote.address) !== 0) {
+        clientIp = connInfo.remote.address;
+      }
+    } catch {
+      // Contexts like app.request() in tests do not provide node-server connection bindings.
     }
   }
 
