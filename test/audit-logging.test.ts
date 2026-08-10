@@ -143,11 +143,20 @@ describe("audit logging", () => {
       entry.obj.event === "gpx_stored" &&
       entry.obj.result === "failure"
     );
+    const responseSentEvent = entries.find((entry) =>
+      entry.obj.event === "response_sent" &&
+      entry.obj.status === 500 &&
+      entry.level === "error"
+    );
 
     expect(anemochoreEvent?.obj.status).toBe(401);
     expect(anemochoreEvent?.obj.failure_reason).toBe("anemochore_rejected");
     expect(storedEvent?.obj.status).toBe(401);
     expect(storedEvent?.obj.failure_reason).toBe("anemochore_rejected");
+    expect(responseSentEvent?.obj.error_message).toBe(
+      "Anemochore rejected upload request (401)",
+    );
+    expect(responseSentEvent?.obj.error_message).not.toContain("id or delete_key");
   });
 
   it("records upload unreachable failures with failure_reason anemochore_unreachable", async () => {

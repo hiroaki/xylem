@@ -59,3 +59,12 @@ export function buildAnemochoreUnreachableError(
     `Anemochore ${operation} failed${suffix}`,
   );
 }
+
+export function buildAnemochoreRejectedError(
+  operation: string,
+  status: number,
+): Error {
+  return new Error(
+    `Anemochore rejected ${operation} request (${status})`,
+  );
+}

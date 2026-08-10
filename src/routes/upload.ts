@@ -10,6 +10,7 @@ import {
   resultFromStatus,
 } from "../logging/audit-event.js";
 import {
+  buildAnemochoreRejectedError,
   buildAnemochoreUnreachableError,
   getSafeNetworkErrorDetails,
 } from "../logging/anemochore-error.js";
@@ -73,8 +74,6 @@ upload.post("/api/upload", async (c) => {
     );
   }
 
-  const data = await response.json();
-
   const uploadResult = resultFromStatus(response.status);
 
   emitAuditEvent(c, {
@@ -85,6 +84,22 @@ upload.post("/api/upload", async (c) => {
       ? { failure_reason: "anemochore_rejected" as const }
       : {}),
   });
+
+  if (uploadResult === "failure") {
+    emitAuditEvent(c, {
+      event: "gpx_stored",
+      result: "failure",
+      status: response.status,
+      failure_reason: "anemochore_rejected",
+    });
+
+    throw buildAnemochoreRejectedError(
+      "upload",
+      response.status,
+    );
+  }
+
+  const data = await response.json();
 
   if (data.url) {
     data.url = rewritePublicUrl(
@@ -98,9 +113,6 @@ upload.post("/api/upload", async (c) => {
       event: "gpx_stored",
       result: "failure",
       status: response.status,
-      ...(uploadResult === "failure"
-        ? { failure_reason: "anemochore_rejected" as const }
-        : {}),
     });
 
     throw new Error(
@@ -110,12 +122,9 @@ upload.post("/api/upload", async (c) => {
 
   emitAuditEvent(c, {
     event: "gpx_stored",
-    result: uploadResult,
+    result: "success",
     status: response.status,
     gpx_id: data.id,
-    ...(uploadResult === "failure"
-      ? { failure_reason: "anemochore_rejected" as const }
-      : {}),
   });
 
   data.deleteToken = await createDeleteToken(
