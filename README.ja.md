@@ -155,6 +155,14 @@ Xylem は以下を使った構造化 JSON 監査ログを出力します。
 - delete token
 - アップロード本文
 
+### 監査対象の範囲とイベント仕様
+
+- 監査ミドルウェアは業務ルート（`/api/upload`, `/api/gpx/*`）にのみ適用されます。
+- 静的ファイルへのリクエストは監査イベントの対象外です。
+- ルートハンドラーは業務監査イベントを出力します（例: `upload_received`, `anemochore_upload_completed`, `gpx_stored`, `gpx_retrieval_requested`, `anemochore_gpx_fetched`, `gpx_deletion_requested`, `gpx_deletion_rejected`, `anemochore_gpx_deleted`）。
+- 失敗イベントでは `failure_reason`（`anemochore_rejected`, `anemochore_unreachable`, `anemochore_invalid_response`）を明示します。
+- ログレベルは監査結果に応じて決定します（`success` -> `info`, `failure` -> `error`）。
+
 
 ## API 仕様
 

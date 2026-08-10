@@ -155,6 +155,14 @@ Audit logs are designed to avoid writing sensitive values such as:
 - delete tokens
 - upload body contents
 
+### Audit scope and event semantics
+
+- Audit middleware is applied only to business routes (`/api/upload`, `/api/gpx/*`).
+- Requests for static files are intentionally excluded from audit events.
+- Route handlers emit business audit events (for example `upload_received`, `anemochore_upload_completed`, `gpx_stored`, `gpx_retrieval_requested`, `anemochore_gpx_fetched`, `gpx_deletion_requested`, `gpx_deletion_rejected`, `anemochore_gpx_deleted`).
+- Failure events use explicit `failure_reason` values (`anemochore_rejected`, `anemochore_unreachable`, `anemochore_invalid_response`).
+- Log level is derived from audit result (`success` -> `info`, `failure` -> `error`).
+
 
 ## API Specification
 
