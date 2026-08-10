@@ -119,6 +119,73 @@ docker compose up --build
 TODO: デプロイ手順を追加する
 
 
+## 監査ログ
+
+Xylem は以下を使った構造化 JSON 監査ログを出力します。
+
+- `@hono/structured-logger`
+- `pino`
+- Hono の `requestId()` ミドルウェア
+
+### Request ID 方針
+
+- Request ID は Hono `requestId()` によりサーバー側で生成されます。
+- クライアントが送信した `X-Request-Id` は採用しません。
+- `request_id` は Xylem/Anemochore 間の監査相関 ID として利用する想定です。
+- 現時点では `request_id` をレスポンスヘッダーとしてクライアントへ返していません。
+
+### Client IP 方針
+
+- 既定では任意クライアントの転送ヘッダーを信頼しません。
+- 信頼できるプロキシ（例: kamal-proxy）の背後で運用する場合のみ、信頼するヘッダー名を指定して元の client IP を抽出できます。
+- 信頼できる転送情報がない場合は、可能な範囲で直接接続情報を使います。
+
+### ログ関連の環境変数
+
+- `LOG_LEVEL`（既定: `info`）
+- `XYLEM_TRUST_PROXY`（`true` または `1` で信頼プロキシモードを有効化）
+- `XYLEM_TRUSTED_CLIENT_IP_HEADER`（既定: `X-Forwarded-For`）
+
+### 機微情報の扱い
+
+監査ログには以下のような機微値を記録しない設計です。
+
+- `ANEMOCHORE_API_KEY`
+- `XYLEM_DELETE_SECRET`
+- delete token
+- アップロード本文
+
+### 監査対象の範囲とイベント仕様
+
+- 監査ミドルウェアは業務ルート（`/api/upload`, `/api/gpx/*`）にのみ適用されます。
+- 静的ファイルへのリクエストは監査イベントの対象外です。
+- ログレベルは監査結果に応じて決定します（`success` -> `info`, `failure` -> `error`）。
+
+#### 実際に出力する監査イベント
+
+| イベント | 出力元 | 意味 |
+| --- | --- | --- |
+| `request_received` | ミドルウェア | 監査対象リクエストを Xylem が受信した時点で出力。 |
+| `response_sent` | ミドルウェア | 監査対象リクエストに対するレスポンス送信時に出力。 |
+| `upload_rejected` | upload ルート | upstream 呼び出し前にアップロードをローカル拒否（例: file 欠落）。 |
+| `upload_received` | upload ルート | アップロード本文を受理し、upstream 連携へ進めたことを記録。 |
+| `anemochore_upload_completed` | upload ルート | upstream へのアップロード処理の完了結果（成功/拒否/到達不能）。 |
+| `gpx_stored` | upload ルート | Xylem 観点での GPX 保存処理の最終結果。 |
+| `gpx_retrieval_requested` | gpx ルート | GPX 取得リクエストを受理し、処理開始したことを記録。 |
+| `anemochore_gpx_fetched` | gpx ルート | upstream の GPX 取得結果（成功/拒否/到達不能）。 |
+| `gpx_deletion_requested` | gpx ルート | GPX 削除リクエストを受理し、トークン検証を開始。 |
+| `gpx_deletion_rejected` | gpx ルート | GPX 削除をローカル拒否（トークン欠落/不正）。 |
+| `anemochore_gpx_deleted` | gpx ルート | upstream の GPX 削除結果（成功/拒否/到達不能）。 |
+
+#### 失敗イベントの分類
+
+| failure_reason | 主な発生条件 | 補足 |
+| --- | --- | --- |
+| `anemochore_rejected` | Anemochore が 4xx/5xx など非成功ステータスで応答 | upstream 応答は受信済みで、拒否として扱う |
+| `anemochore_unreachable` | Anemochore への接続失敗やタイムアウトなどで応答を受け取れない | `error_code` や `error_message` が付与されることがある |
+| `anemochore_invalid_response` | upload 成功扱いの応答だが必須フィールド（id/delete_key）が欠落 | upstream 応答形式不正として扱う |
+
+
 ## API 仕様
 
 Xylem は Anemochore と同じパブリック API を公開します。
