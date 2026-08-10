@@ -4,7 +4,10 @@ import type { BaseLogger } from "@hono/structured-logger";
 import type { Context, MiddlewareHandler } from "hono";
 
 import { getRootLogger } from "../logging/root-logger.js";
-import { resultFromStatus } from "../logging/audit-event.js";
+import {
+  logAuditByResult,
+  resultFromStatus,
+} from "../logging/audit-event.js";
 
 type BoundLogger = BaseLogger & {
   child?: (bindings: Record<string, unknown>) => BoundLogger;
@@ -63,18 +66,20 @@ function createRequestLogger(c: Context) {
 
 export const auditLoggerMiddleware: MiddlewareHandler = structuredLogger({
   createLogger: createRequestLogger,
-  onRequest: (logger, c) => {
-    logger.info({
+  onRequest: (logger) => {
+    logAuditByResult(logger, "success", {
       timestamp: new Date().toISOString(),
       event: "request_received",
       result: "success",
     });
   },
   onResponse: (logger, c, elapsedMs) => {
-    logger.info({
+    const result = resultFromStatus(c.res.status);
+
+    logAuditByResult(logger, result, {
       timestamp: new Date().toISOString(),
       event: "response_sent",
-      result: resultFromStatus(c.res.status),
+      result,
       status: c.res.status,
       elapsed_ms: elapsedMs,
     });

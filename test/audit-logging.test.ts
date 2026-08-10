@@ -107,6 +107,95 @@ beforeEach(() => {
 });
 
 describe("audit logging", () => {
+  it("keeps successful anemochore completion events at info level for upload retrieval and deletion", async () => {
+    const { app, entries } = await setupApp();
+    const fetchMock = vi.mocked(globalThis.fetch);
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          id: "gpx-success-1",
+          delete_key: "delete-key-success",
+          url: "https://anemochore.example/api/gpx/gpx-success-1",
+        }),
+        {
+          status: 201,
+          headers: {
+            "content-type": "application/json",
+          },
+        },
+      ),
+    );
+    fetchMock.mockResolvedValueOnce(
+      new Response("<gpx></gpx>", {
+        status: 200,
+      }),
+    );
+    fetchMock.mockResolvedValueOnce(
+      new Response(null, {
+        status: 204,
+      }),
+    );
+
+    const uploadResponse = await app.request(
+      "http://localhost/api/upload",
+      {
+        method: "POST",
+        body: buildUploadFormData(),
+      },
+    );
+    expect(uploadResponse.status).toBe(201);
+
+    const retrievalResponse = await app.request(
+      "http://localhost/api/gpx/gpx-success-1",
+      {
+        method: "GET",
+      },
+    );
+    expect(retrievalResponse.status).toBe(200);
+
+    const deleteToken = await createDeleteToken(
+      {
+        id: "gpx-success-1",
+        deleteKey: "delete-key-success",
+      },
+      "TEST_XYLEM_DELETE_SECRET",
+    );
+
+    const deletionResponse = await app.request(
+      "http://localhost/api/gpx/gpx-success-1",
+      {
+        method: "DELETE",
+        headers: {
+          "X-Delete-Token": deleteToken,
+        },
+      },
+    );
+    expect(deletionResponse.status).toBe(204);
+
+    const uploadCompleted = entries.find((entry) =>
+      entry.obj.event === "anemochore_upload_completed" &&
+      entry.obj.result === "success"
+    );
+    const gpxStoredSuccess = entries.find((entry) =>
+      entry.obj.event === "gpx_stored" &&
+      entry.obj.result === "success"
+    );
+    const gpxFetchedSuccess = entries.find((entry) =>
+      entry.obj.event === "anemochore_gpx_fetched" &&
+      entry.obj.result === "success"
+    );
+    const gpxDeletedSuccess = entries.find((entry) =>
+      entry.obj.event === "anemochore_gpx_deleted" &&
+      entry.obj.result === "success"
+    );
+
+    expect(uploadCompleted?.level).toBe("info");
+    expect(gpxStoredSuccess?.level).toBe("info");
+    expect(gpxFetchedSuccess?.level).toBe("info");
+    expect(gpxDeletedSuccess?.level).toBe("info");
+  });
+
   it("records upload rejected failures with failure_reason anemochore_rejected", async () => {
     const { app, entries } = await setupApp();
     const fetchMock = vi.mocked(globalThis.fetch);
@@ -136,7 +225,7 @@ describe("audit logging", () => {
     expect(res.status).toBe(500);
 
     const anemochoreEvent = entries.find((entry) =>
-      entry.obj.event === "anemochore_upload_requested" &&
+      entry.obj.event === "anemochore_upload_completed" &&
       entry.obj.result === "failure"
     );
     const storedEvent = entries.find((entry) =>
@@ -151,8 +240,10 @@ describe("audit logging", () => {
 
     expect(anemochoreEvent?.obj.status).toBe(401);
     expect(anemochoreEvent?.obj.failure_reason).toBe("anemochore_rejected");
+    expect(anemochoreEvent?.level).toBe("error");
     expect(storedEvent?.obj.status).toBe(401);
     expect(storedEvent?.obj.failure_reason).toBe("anemochore_rejected");
+    expect(storedEvent?.level).toBe("error");
     expect(responseSentEvent?.obj.error_message).toBe(
       "Anemochore rejected upload request (401)",
     );
@@ -183,7 +274,7 @@ describe("audit logging", () => {
     expect(res.status).toBe(500);
 
     const anemochoreEvent = entries.find((entry) =>
-      entry.obj.event === "anemochore_upload_requested" &&
+      entry.obj.event === "anemochore_upload_completed" &&
       entry.obj.result === "failure"
     );
     const storedEvent = entries.find((entry) =>
@@ -198,8 +289,10 @@ describe("audit logging", () => {
 
     expect(anemochoreEvent?.obj.failure_reason).toBe("anemochore_unreachable");
     expect(anemochoreEvent?.obj.error_code).toBe("ECONNREFUSED");
+    expect(anemochoreEvent?.level).toBe("error");
     expect(storedEvent?.obj.failure_reason).toBe("anemochore_unreachable");
     expect(storedEvent?.obj.error_code).toBe("ECONNREFUSED");
+    expect(storedEvent?.level).toBe("error");
     expect(responseEvent?.obj.error_message).toContain("ECONNREFUSED");
   });
 
@@ -276,7 +369,7 @@ describe("audit logging", () => {
     const responseSentFromUpstreamFailure = entries.find((entry) =>
       entry.obj.event === "response_sent" &&
       entry.obj.status === 503 &&
-      entry.level === "info"
+      entry.level === "error"
     );
     const responseSentFromException = entries.find((entry) =>
       entry.obj.event === "response_sent" &&
@@ -286,7 +379,9 @@ describe("audit logging", () => {
 
     expect(anemochoreFailure?.obj.status).toBe(503);
     expect(anemochoreFailure?.obj.failure_reason).toBe("anemochore_rejected");
+    expect(anemochoreFailure?.level).toBe("error");
     expect(anemochoreUnreachable?.obj.error_message).toContain("upstream connection failed");
+    expect(anemochoreUnreachable?.level).toBe("error");
     expect(responseSentFromUpstreamFailure?.obj.result).toBe("failure");
     expect(responseSentFromException?.obj.result).toBe("failure");
   });
@@ -328,6 +423,7 @@ describe("audit logging", () => {
 
     expect(deletionEvent?.obj.failure_reason).toBe("anemochore_unreachable");
     expect(deletionEvent?.obj.error_code).toBe("ETIMEDOUT");
+    expect(deletionEvent?.level).toBe("error");
   });
 
   it("does not write delete tokens or secrets to audit logs", async () => {

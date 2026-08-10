@@ -53,7 +53,7 @@ upload.post("/api/upload", async (c) => {
     const errorDetails = getSafeNetworkErrorDetails(error);
 
     emitAuditEvent(c, {
-      event: "anemochore_upload_requested",
+      event: "anemochore_upload_completed",
       result: "failure",
       failure_reason: "anemochore_unreachable",
       error_message: errorDetails.error_message,
@@ -77,7 +77,7 @@ upload.post("/api/upload", async (c) => {
   const uploadResult = resultFromStatus(response.status);
 
   emitAuditEvent(c, {
-    event: "anemochore_upload_requested",
+    event: "anemochore_upload_completed",
     result: uploadResult,
     status: response.status,
     ...(uploadResult === "failure"
