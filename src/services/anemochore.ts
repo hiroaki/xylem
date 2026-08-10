@@ -19,13 +19,11 @@ export class AnemochoreClient {
       headers: this.headers(),
       body: formData,
     });
-    console.log(`AnemochoreClient: POST ${this.apiUrl}/api/upload - Status: ${response.status}`);
     return response;
   }
 
   async getGpx(id: string): Promise<Response> {
     const response = await fetch(`${this.apiUrl}/api/gpx/${id}`);
-    console.log(`AnemochoreClient: GET ${this.apiUrl}/api/gpx/${id} - Status: ${response.status}`);
     return response;
   }
 
@@ -40,7 +38,6 @@ export class AnemochoreClient {
         "X-Delete-Key": deleteKey,
       },
     });
-    console.log(`AnemochoreClient: DELETE ${this.apiUrl}/api/gpx/${id} - Status: ${response.status}`);
     return response;
   }
 }

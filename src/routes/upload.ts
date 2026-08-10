@@ -5,6 +5,10 @@ import { createDeleteToken } from "../utils/delete-token.js";
 import { buildDeleteUrl } from "../utils/delete-url.js";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { getPublicOrigin } from "../utils/public-origin.js";
+import {
+  emitAuditEvent,
+  resultFromStatus,
+} from "../logging/audit-event.js";
 
 const upload = new Hono();
 const config = getConfig();
@@ -14,11 +18,22 @@ upload.post("/api/upload", async (c) => {
   const file = formData.get("file");
 
   if (!(file instanceof File)) {
+    emitAuditEvent(c, {
+      event: "upload_rejected",
+      result: "failure",
+      status: 400,
+    });
+
     return c.json(
       { error: "file is required" },
       400,
     );
   }
+
+  emitAuditEvent(c, {
+    event: "upload_received",
+    result: "success",
+  });
 
   const client = new AnemochoreClient(
     config.anemochoreApiUrl,
@@ -28,6 +43,12 @@ upload.post("/api/upload", async (c) => {
   const response = await client.upload(file);
   const data = await response.json();
 
+  emitAuditEvent(c, {
+    event: "anemochore_upload_requested",
+    result: resultFromStatus(response.status),
+    status: response.status,
+  });
+
   if (data.url) {
     data.url = rewritePublicUrl(
       data.url,
@@ -36,10 +57,23 @@ upload.post("/api/upload", async (c) => {
   }
 
   if (!data.id || !data.delete_key) {
+    emitAuditEvent(c, {
+      event: "gpx_stored",
+      result: "failure",
+      status: response.status,
+    });
+
     throw new Error(
       "Invalid response from Anemochore: id or delete_key is missing",
     );
   }
+
+  emitAuditEvent(c, {
+    event: "gpx_stored",
+    result: resultFromStatus(response.status),
+    status: response.status,
+    gpx_id: data.id,
+  });
 
   data.deleteToken = await createDeleteToken(
     {
