@@ -113,6 +113,7 @@ upload.post("/api/upload", async (c) => {
       event: "gpx_stored",
       result: "failure",
       status: response.status,
+      failure_reason: "anemochore_invalid_response",
     });
 
     throw new Error(

@@ -4,7 +4,8 @@ import type { BaseLogger } from "@hono/structured-logger";
 export type AuditResult = "success" | "failure";
 export type AuditFailureReason =
   | "anemochore_rejected"
-  | "anemochore_unreachable";
+  | "anemochore_unreachable"
+  | "anemochore_invalid_response";
 
 type AuditEventPayload = {
   event: string;
