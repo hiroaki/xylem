@@ -119,6 +119,43 @@ docker compose up --build
 TODO: Add deployment instructions
 
 
+## Audit Logging
+
+Xylem uses structured JSON audit logs with:
+
+- `@hono/structured-logger`
+- `pino`
+- Hono `requestId()` middleware
+
+### Request ID policy
+
+- Request IDs are generated server-side by Hono `requestId()`.
+- Client-supplied `X-Request-Id` values are not accepted.
+- The `request_id` value is intended for Xylem/Anemochore audit correlation.
+- Xylem currently does not return `request_id` to clients in response headers.
+
+### Client IP policy
+
+- By default, Xylem does not trust forwarding headers from arbitrary clients.
+- If Xylem is deployed behind a trusted proxy (for example kamal-proxy), you can enable trusted proxy mode and choose which header is accepted for original client IP extraction.
+- If trusted forwarding information is unavailable, Xylem uses direct connection metadata when available.
+
+### Environment variables for logging behavior
+
+- `LOG_LEVEL` (default: `info`)
+- `XYLEM_TRUST_PROXY` (`true`/`1` to enable trusted forwarded IP handling)
+- `XYLEM_TRUSTED_CLIENT_IP_HEADER` (default: `X-Forwarded-For`)
+
+### Sensitive data handling
+
+Audit logs are designed to avoid writing sensitive values such as:
+
+- `ANEMOCHORE_API_KEY`
+- `XYLEM_DELETE_SECRET`
+- delete tokens
+- upload body contents
+
+
 ## API Specification
 
 Xylem exposes the same public API as Anemochore.

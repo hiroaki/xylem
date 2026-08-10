@@ -119,6 +119,43 @@ docker compose up --build
 TODO: デプロイ手順を追加する
 
 
+## 監査ログ
+
+Xylem は以下を使った構造化 JSON 監査ログを出力します。
+
+- `@hono/structured-logger`
+- `pino`
+- Hono の `requestId()` ミドルウェア
+
+### Request ID 方針
+
+- Request ID は Hono `requestId()` によりサーバー側で生成されます。
+- クライアントが送信した `X-Request-Id` は採用しません。
+- `request_id` は Xylem/Anemochore 間の監査相関 ID として利用する想定です。
+- 現時点では `request_id` をレスポンスヘッダーとしてクライアントへ返していません。
+
+### Client IP 方針
+
+- 既定では任意クライアントの転送ヘッダーを信頼しません。
+- 信頼できるプロキシ（例: kamal-proxy）の背後で運用する場合のみ、信頼するヘッダー名を指定して元の client IP を抽出できます。
+- 信頼できる転送情報がない場合は、可能な範囲で直接接続情報を使います。
+
+### ログ関連の環境変数
+
+- `LOG_LEVEL`（既定: `info`）
+- `XYLEM_TRUST_PROXY`（`true` または `1` で信頼プロキシモードを有効化）
+- `XYLEM_TRUSTED_CLIENT_IP_HEADER`（既定: `X-Forwarded-For`）
+
+### 機微情報の扱い
+
+監査ログには以下のような機微値を記録しない設計です。
+
+- `ANEMOCHORE_API_KEY`
+- `XYLEM_DELETE_SECRET`
+- delete token
+- アップロード本文
+
+
 ## API 仕様
 
 Xylem は Anemochore と同じパブリック API を公開します。
