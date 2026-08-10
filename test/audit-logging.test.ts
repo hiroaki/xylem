@@ -196,9 +196,16 @@ describe("audit logging", () => {
 
   it("does not blindly trust forwarded IP header unless proxy trust is enabled", async () => {
     const withoutTrustedProxy = await setupApp({ trustProxy: false });
+    const noTrustFetchMock = vi.mocked(globalThis.fetch);
+
+    noTrustFetchMock.mockResolvedValueOnce(
+      new Response("<gpx></gpx>", {
+        status: 200,
+      }),
+    );
 
     await withoutTrustedProxy.app.request(
-      "http://localhost/api/health",
+      "http://localhost/api/gpx/gpx-300",
       {
         headers: {
           "X-Forwarded-For": "203.0.113.77",
@@ -213,9 +220,16 @@ describe("audit logging", () => {
     expect(noTrustRequestLog?.obj.client_ip).not.toBe("203.0.113.77");
 
     const withTrustedProxy = await setupApp({ trustProxy: true });
+    const trustFetchMock = vi.mocked(globalThis.fetch);
+
+    trustFetchMock.mockResolvedValueOnce(
+      new Response("<gpx></gpx>", {
+        status: 200,
+      }),
+    );
 
     await withTrustedProxy.app.request(
-      "http://localhost/api/health",
+      "http://localhost/api/gpx/gpx-301",
       {
         headers: {
           "X-Forwarded-For": "203.0.113.77, 10.0.0.10",
@@ -228,5 +242,14 @@ describe("audit logging", () => {
     );
 
     expect(trustRequestLog?.obj.client_ip).toBe("203.0.113.77");
+  });
+
+  it("does not emit audit events for static asset requests", async () => {
+    const { app, entries } = await setupApp();
+
+    const res = await app.request("http://localhost/index.html");
+
+    expect(res.status).toBe(200);
+    expect(entries).toHaveLength(0);
   });
 });
