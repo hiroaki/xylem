@@ -159,7 +159,6 @@ Xylem は以下を使った構造化 JSON 監査ログを出力します。
 
 - 監査ミドルウェアは業務ルート（`/api/upload`, `/api/gpx/*`）にのみ適用されます。
 - 静的ファイルへのリクエストは監査イベントの対象外です。
-- 失敗イベントでは `failure_reason`（`anemochore_rejected`, `anemochore_unreachable`, `anemochore_invalid_response`）を明示します。
 - ログレベルは監査結果に応じて決定します（`success` -> `info`, `failure` -> `error`）。
 
 #### 実際に出力する監査イベント
@@ -177,6 +176,14 @@ Xylem は以下を使った構造化 JSON 監査ログを出力します。
 | `gpx_deletion_requested` | gpx ルート | GPX 削除リクエストを受理し、トークン検証を開始。 |
 | `gpx_deletion_rejected` | gpx ルート | GPX 削除をローカル拒否（トークン欠落/不正）。 |
 | `anemochore_gpx_deleted` | gpx ルート | upstream の GPX 削除結果（成功/拒否/到達不能）。 |
+
+#### 失敗イベントの分類
+
+| failure_reason | 主な発生条件 | 補足 |
+| --- | --- | --- |
+| `anemochore_rejected` | Anemochore が 4xx/5xx など非成功ステータスで応答 | upstream 応答は受信済みで、拒否として扱う |
+| `anemochore_unreachable` | Anemochore への接続失敗やタイムアウトなどで応答を受け取れない | `error_code` や `error_message` が付与されることがある |
+| `anemochore_invalid_response` | upload 成功扱いの応答だが必須フィールド（id/delete_key）が欠落 | upstream 応答形式不正として扱う |
 
 
 ## API 仕様

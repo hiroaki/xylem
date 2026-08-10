@@ -159,7 +159,6 @@ Audit logs are designed to avoid writing sensitive values such as:
 
 - Audit middleware is applied only to business routes (`/api/upload`, `/api/gpx/*`).
 - Requests for static files are intentionally excluded from audit events.
-- Failure events use explicit `failure_reason` values (`anemochore_rejected`, `anemochore_unreachable`, `anemochore_invalid_response`).
 - Log level is derived from audit result (`success` -> `info`, `failure` -> `error`).
 
 #### Actual audit events
@@ -177,6 +176,14 @@ Audit logs are designed to avoid writing sensitive values such as:
 | `gpx_deletion_requested` | gpx route | GPX deletion request accepted and token validation started. |
 | `gpx_deletion_rejected` | gpx route | GPX deletion request rejected locally (missing/invalid token). |
 | `anemochore_gpx_deleted` | gpx route | Upstream GPX deletion finished (success, rejected response, or unreachable upstream). |
+
+#### Failure event classification
+
+| failure_reason | Typical condition | Notes |
+| --- | --- | --- |
+| `anemochore_rejected` | Anemochore returns a non-success status such as 4xx/5xx | Upstream responded, but the request is treated as rejected |
+| `anemochore_unreachable` | Connection failure, timeout, or other transport error before receiving a response | `error_code` and/or `error_message` may be present |
+| `anemochore_invalid_response` | Upload path gets a nominally successful upstream response with missing required fields (`id`/`delete_key`) | Treated as invalid upstream response shape |
 
 
 ## API Specification
