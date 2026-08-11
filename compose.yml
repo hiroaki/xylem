@@ -7,12 +7,12 @@ services:
       - .:/app
       - node_modules:/app/node_modules
     environment:
-      ANEMOCHORE_API_URL: ${ANEMOCHORE_API_URL}
-      ANEMOCHORE_API_KEY: ${ANEMOCHORE_API_KEY}
-      XYLEM_DELETE_SECRET: ${XYLEM_DELETE_SECRET}
-      XYLEM_STATIC_DIR: ${XYLEM_STATIC_DIR}
-      BINDING: ${BINDING}
-      PORT: ${PORT}
+      - ANEMOCHORE_API_URL
+      - ANEMOCHORE_API_KEY
+      - XYLEM_DELETE_SECRET
+      - XYLEM_STATIC_DIR
+      - BINDING
+      - PORT
     command: npm run dev
 
 volumes:
