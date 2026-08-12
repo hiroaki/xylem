@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { getConfig } from "../config.js";
-import { AnemochoreClient } from "../services/anemochore.js";
+import { createAnemochoreClient } from "../services/anemochore.js";
 import { verifyDeleteToken } from "../utils/delete-token.js";
 import {
   emitAuditEvent,
@@ -23,10 +23,7 @@ gpx.get("/api/gpx/:id", async (c) => {
     gpx_id: gpxId,
   });
 
-  const client = new AnemochoreClient(
-    config.anemochoreApiUrl,
-    config.anemochoreApiKey,
-  );
+  const client = createAnemochoreClient(c);
 
   let response: Response;
 
@@ -132,10 +129,7 @@ gpx.delete("/api/gpx/:id", async (c) => {
     );
   }
 
-  const client = new AnemochoreClient(
-    config.anemochoreApiUrl,
-    config.anemochoreApiKey,
-  );
+  const client = createAnemochoreClient(c);
 
   let response: Response;
 

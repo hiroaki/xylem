@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { getConfig } from "../config.js";
-import { AnemochoreClient } from "../services/anemochore.js";
+import { createAnemochoreClient } from "../services/anemochore.js";
 import { createDeleteToken } from "../utils/delete-token.js";
 import { buildDeleteUrl } from "../utils/delete-url.js";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -40,10 +40,7 @@ upload.post("/api/upload", async (c) => {
     result: "success",
   });
 
-  const client = new AnemochoreClient(
-    config.anemochoreApiUrl,
-    config.anemochoreApiKey,
-  );
+  const client = createAnemochoreClient(c);
 
   let response: Response;
 

@@ -1,11 +1,22 @@
-export class AnemochoreClient {
+import type { Context } from "hono";
+import { getConfig } from "../config.js";
+
+class AnemochoreClient {
   constructor(
     private apiUrl: string,
     private apiKey: string,
+    private extraHeaders: Record<string, string> = {},
   ) {}
 
   private headers() {
     return {
+      ...this.extraHeaders,
+    };
+  }
+
+  private authenticatedHeaders() {
+    return {
+      ...this.extraHeaders,
       Authorization: `Bearer ${this.apiKey}`,
     };
   }
@@ -16,14 +27,18 @@ export class AnemochoreClient {
 
     const response = await fetch(`${this.apiUrl}/api/upload`, {
       method: "POST",
-      headers: this.headers(),
+      headers: this.authenticatedHeaders(),
       body: formData,
     });
+
     return response;
   }
 
   async getGpx(id: string): Promise<Response> {
-    const response = await fetch(`${this.apiUrl}/api/gpx/${id}`);
+    const response = await fetch(`${this.apiUrl}/api/gpx/${id}`, {
+      headers: this.headers(),
+    });
+
     return response;
   }
 
@@ -34,10 +49,26 @@ export class AnemochoreClient {
     const response = await fetch(`${this.apiUrl}/api/gpx/${id}`, {
       method: "DELETE",
       headers: {
-        ...this.headers(),
+        ...this.authenticatedHeaders(),
         "X-Delete-Key": deleteKey,
       },
     });
+
     return response;
   }
+}
+
+const config = getConfig();
+
+export function createAnemochoreClient(c: Context): AnemochoreClient {
+  return new AnemochoreClient(
+    config.anemochoreApiUrl,
+    config.anemochoreApiKey,
+    {
+      "X-Request-Id": c.var.requestId,
+      ...(c.var.clientIp
+        ? { "X-Client-IP": c.var.clientIp }
+        : {}),
+    },
+  );
 }
