@@ -98,13 +98,6 @@ upload.post("/api/upload", async (c) => {
 
   const data = await response.json();
 
-  if (data.url) {
-    data.url = rewritePublicUrl(
-      data.url,
-      getPublicOrigin(c),
-    );
-  }
-
   if (!data.id || !data.delete_key) {
     emitAuditEvent(c, {
       event: "gpx_stored",
@@ -138,6 +131,11 @@ upload.post("/api/upload", async (c) => {
     data.id,
   );
 
+  data.url = new URL(
+    `/api/gpx/${data.id}`,
+    getPublicOrigin(c),
+  ).toString();
+
   delete data.delete_key;
 
   return c.json(
@@ -145,14 +143,5 @@ upload.post("/api/upload", async (c) => {
     response.status as ContentfulStatusCode
   );
 });
-
-function rewritePublicUrl(url: string, origin: string) {
-  const parsed = new URL(url);
-
-  return new URL(
-    parsed.pathname + parsed.search,
-    origin,
-  ).toString();
-}
 
 export default upload;
