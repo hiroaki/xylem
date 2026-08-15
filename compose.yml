@@ -9,6 +9,7 @@ services:
     environment:
       - ANEMOCHORE_API_URL
       - ANEMOCHORE_API_KEY
+      - XYLEM_PUBLIC_ORIGIN
       - XYLEM_DELETE_SECRET
       - XYLEM_STATIC_DIR
       - BINDING

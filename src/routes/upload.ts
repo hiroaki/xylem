@@ -4,7 +4,6 @@ import { createAnemochoreClient } from "../services/anemochore.js";
 import { createDeleteToken } from "../utils/delete-token.js";
 import { buildDeleteUrl } from "../utils/delete-url.js";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { getPublicOrigin } from "../utils/public-origin.js";
 import {
   emitAuditEvent,
   resultFromStatus,
@@ -127,13 +126,13 @@ upload.post("/api/upload", async (c) => {
   );
 
   data.deleteUrl = buildDeleteUrl(
-    getPublicOrigin(c),
+    config.xylemPublicOrigin,
     data.id,
   );
 
   data.url = new URL(
     `/api/gpx/${data.id}`,
-    getPublicOrigin(c),
+    config.xylemPublicOrigin,
   ).toString();
 
   delete data.delete_key;

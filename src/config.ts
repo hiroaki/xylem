@@ -1,6 +1,7 @@
 export type Config = {
   anemochoreApiUrl: string;
   anemochoreApiKey: string;
+  xylemPublicOrigin: string;
   xylemDeleteSecret: string;
   xylemStaticDir: string;
   xylemTrustProxy: boolean;
@@ -16,6 +17,7 @@ export function getConfig(): Config {
   return {
     anemochoreApiUrl: process.env.ANEMOCHORE_API_URL!,
     anemochoreApiKey: process.env.ANEMOCHORE_API_KEY!,
+    xylemPublicOrigin: process.env.XYLEM_PUBLIC_ORIGIN!,
     xylemDeleteSecret: process.env.XYLEM_DELETE_SECRET!,
     xylemStaticDir: process.env.XYLEM_STATIC_DIR ?? "./public",
     xylemTrustProxy: parseBoolean(process.env.XYLEM_TRUST_PROXY),
