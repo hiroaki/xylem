@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { getConfig } from "../config.js";
 import { createAnemochoreClient } from "../services/anemochore.js";
 import { verifyDeleteToken } from "../utils/delete-token.js";
+import { serializeGpx } from "../gpx/serialize.js";
 import {
   emitAuditEvent,
   resultFromStatus,
@@ -59,10 +60,23 @@ gpx.get("/api/gpx/:id", async (c) => {
       : {}),
   });
 
-  return new Response(response.body, {
-    status: response.status,
-    headers: response.headers,
-  });
+  if (response.status !== 200) {
+    return new Response(response.body, {
+      status: response.status,
+      headers: response.headers,
+    });
+  }
+
+  // Anemochore returns the canonical payload as JSON; re-serialize it to GPX XML
+  // here so Tilia (which never changes) keeps receiving real GPX bytes.
+  const canonicalDocument = await response.json();
+  const gpxXml = serializeGpx(canonicalDocument);
+
+  return c.body(
+    gpxXml,
+    200,
+    { "Content-Type": "application/gpx+xml; charset=utf-8" },
+  );
 });
 
 gpx.delete("/api/gpx/:id", async (c) => {

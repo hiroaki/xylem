@@ -59,12 +59,33 @@ function buildUploadFormData(): FormData {
   const formData = new FormData();
   formData.append(
     "file",
-    new File(["<gpx></gpx>"], "sample.gpx", {
-      type: "application/gpx+xml",
-    }),
+    new File(
+      ['<gpx version="1.1"><wpt lat="35.0" lon="139.0"><name>Sample</name></wpt></gpx>'],
+      "sample.gpx",
+      { type: "application/gpx+xml" },
+    ),
   );
 
   return formData;
+}
+
+function canonicalGpxResponseBody(): string {
+  return JSON.stringify({
+    schema_version: 1,
+    data_type: "gpx",
+    data: {
+      tracks: [],
+      routes: [],
+      waypoints: [{ coordinates: [139.0, 35.0], name: "Sample" }],
+    },
+  });
+}
+
+function canonicalGpxResponse(status = 200): Response {
+  return new Response(canonicalGpxResponseBody(), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
 }
 
 async function setupApp(options?: {
@@ -117,7 +138,6 @@ describe("audit logging", () => {
         JSON.stringify({
           id: "gpx-success-1",
           delete_key: "delete-key-success",
-          url: "https://anemochore.example/api/gpx/gpx-success-1",
         }),
         {
           status: 201,
@@ -127,11 +147,7 @@ describe("audit logging", () => {
         },
       ),
     );
-    fetchMock.mockResolvedValueOnce(
-      new Response("<gpx></gpx>", {
-        status: 200,
-      }),
-    );
+    fetchMock.mockResolvedValueOnce(canonicalGpxResponse());
     fetchMock.mockResolvedValueOnce(
       new Response(null, {
         status: 204,
@@ -301,11 +317,7 @@ describe("audit logging", () => {
     const { app, entries } = await setupApp();
     const fetchMock = vi.mocked(globalThis.fetch);
 
-    fetchMock.mockResolvedValueOnce(
-      new Response("<gpx></gpx>", {
-        status: 200,
-      }),
-    );
+    fetchMock.mockResolvedValueOnce(canonicalGpxResponse());
 
     const res = await app.request(
       "http://localhost/api/gpx/gpx-100",
@@ -451,11 +463,7 @@ describe("audit logging", () => {
     const withoutTrustedProxy = await setupApp({ trustProxy: false });
     const noTrustFetchMock = vi.mocked(globalThis.fetch);
 
-    noTrustFetchMock.mockResolvedValueOnce(
-      new Response("<gpx></gpx>", {
-        status: 200,
-      }),
-    );
+    noTrustFetchMock.mockResolvedValueOnce(canonicalGpxResponse());
 
     await withoutTrustedProxy.app.request(
       "http://localhost/api/gpx/gpx-300",
@@ -475,11 +483,7 @@ describe("audit logging", () => {
     const withTrustedProxy = await setupApp({ trustProxy: true });
     const trustFetchMock = vi.mocked(globalThis.fetch);
 
-    trustFetchMock.mockResolvedValueOnce(
-      new Response("<gpx></gpx>", {
-        status: 200,
-      }),
-    );
+    trustFetchMock.mockResolvedValueOnce(canonicalGpxResponse());
 
     await withTrustedProxy.app.request(
       "http://localhost/api/gpx/gpx-301",
