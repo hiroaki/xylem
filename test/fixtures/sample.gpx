@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Xylem test fixture" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata>
+    <author>
+      <name>Someone Private</name>
+      <email id="someone" domain="example.com" />
+    </author>
+    <desc>Should be stripped by canonicalization</desc>
+  </metadata>
+  <wpt lat="35.0100" lon="135.0100">
+    <ele>10.5</ele>
+    <name>Start marker</name>
+    <extensions>
+      <vendor:device xmlns:vendor="urn:example:vendor">GPSWatch 9000</vendor:device>
+    </extensions>
+  </wpt>
+  <rte>
+    <name>Sample Route</name>
+    <rtept lat="35.0000" lon="135.0000" />
+    <rtept lat="35.0500" lon="135.0500">
+      <ele>42</ele>
+    </rtept>
+  </rte>
+  <trk>
+    <name>Sample Track</name>
+    <extensions>
+      <vendor:color xmlns:vendor="urn:example:vendor">#ff0000</vendor:color>
+    </extensions>
+    <trkseg>
+      <trkpt lat="35.2000" lon="135.2000">
+        <ele>120.5</ele>
+        <time>2024-01-01T00:10:00Z</time>
+      </trkpt>
+      <trkpt lat="35.1000" lon="135.1000">
+        <time>2024-01-01T00:00:00Z</time>
+      </trkpt>
+    </trkseg>
+    <trkseg>
+      <trkpt lat="35.3000" lon="135.3000">
+        <ele>130.0</ele>
+      </trkpt>
+    </trkseg>
+  </trk>
+</gpx>

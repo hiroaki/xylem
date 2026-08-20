@@ -3,6 +3,9 @@ import { getConfig } from "../config.js";
 import { createAnemochoreClient } from "../services/anemochore.js";
 import { createDeleteToken } from "../utils/delete-token.js";
 import { buildDeleteUrl } from "../utils/delete-url.js";
+import { canonicalizeGpx } from "../gpx/canonicalize.js";
+import { assertValidCanonicalGpxDocument } from "../gpx/schema.js";
+import { GpxNormalizationError } from "../gpx/errors.js";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import {
   emitAuditEvent,
@@ -39,12 +42,38 @@ upload.post("/api/upload", async (c) => {
     result: "success",
   });
 
+  // Xylem is the sole GPX parse/validate/normalize boundary; Anemochore only
+  // ever sees the canonical payload derived here, never the original bytes.
+  let canonicalDocument;
+
+  try {
+    const rawText = await file.text();
+    canonicalDocument = canonicalizeGpx(rawText);
+    assertValidCanonicalGpxDocument(canonicalDocument);
+  } catch (error) {
+    const message =
+      error instanceof GpxNormalizationError
+        ? error.message
+        : "invalid GPX file";
+
+    emitAuditEvent(c, {
+      event: "upload_rejected",
+      result: "failure",
+      status: 400,
+    });
+
+    return c.json(
+      { error: message },
+      400,
+    );
+  }
+
   const client = createAnemochoreClient(c);
 
   let response: Response;
 
   try {
-    response = await client.upload(file);
+    response = await client.upload(canonicalDocument);
   } catch (error) {
     const errorDetails = getSafeNetworkErrorDetails(error);
 
