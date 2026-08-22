@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import { canonicalizeGpx } from "../src/gpx/canonicalize.js";
+import { parseGpxXml } from "../src/gpx/parse.js";
 import { assertValidCanonicalGpxDocument } from "../src/gpx/schema.js";
 
 describe("assertValidCanonicalGpxDocument", () => {
   it("accepts a canonicalize() result unchanged", () => {
-    const doc = canonicalizeGpx(
-      `<?xml version="1.0"?><gpx version="1.1"><wpt lat="1" lon="2" /></gpx>`,
-    );
+    const doc = canonicalizeGpx(parseGpxXml(`<?xml version="1.0"?><gpx version="1.1"><wpt lat="1" lon="2" /></gpx>`), {
+      maxRawBytes: 2 * 1024 * 1024,
+      maxTotalPoints: Number.MAX_SAFE_INTEGER,
+      maxNameLength: 200,
+    });
 
     expect(() => assertValidCanonicalGpxDocument(doc)).not.toThrow();
   });

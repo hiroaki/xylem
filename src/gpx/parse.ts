@@ -1,6 +1,5 @@
 import { XMLParser, XMLValidator } from "fast-xml-parser";
 
-import { assertSafeGpxXml } from "./xml-security-filter.js";
 import { GpxNormalizationError } from "./errors.js";
 
 // Keep values as raw strings; canonicalize.ts is responsible for numeric/coordinate
@@ -43,9 +42,9 @@ export type GpxDocumentNode = {
   wpt?: GpxPointNode[];
 };
 
+// The parser output is intentionally treated as a structural AST only.
+// Semantic validation and normalization are performed by canonicalize.ts.
 export function parseGpxXml(rawText: string): GpxDocumentNode {
-  assertSafeGpxXml(rawText);
-
   const validation = XMLValidator.validate(rawText);
   if (validation !== true) {
     throw new GpxNormalizationError("invalid GPX file");

@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { canonicalizeGpx } from "../src/gpx/canonicalize.js";
+import { parseGpxXml } from "../src/gpx/parse.js";
 import { serializeGpx } from "../src/gpx/serialize.js";
 
 function fixture(name: string): string {
@@ -36,8 +37,17 @@ describe("canonicalize/serialize idempotency", () => {
   it.each(cases)(
     "canonicalize(serialize(canonicalize(input))) equals canonicalize(input) — $name",
     ({ gpx }) => {
-      const canonical = canonicalizeGpx(gpx);
-      const roundTripped = canonicalizeGpx(serializeGpx(canonical));
+      const parsed = parseGpxXml(gpx);
+      const canonical = canonicalizeGpx(parsed, {
+        maxRawBytes: 2 * 1024 * 1024,
+        maxTotalPoints: Number.MAX_SAFE_INTEGER,
+        maxNameLength: 200,
+      });
+      const roundTripped = canonicalizeGpx(parseGpxXml(serializeGpx(canonical)), {
+        maxRawBytes: 2 * 1024 * 1024,
+        maxTotalPoints: Number.MAX_SAFE_INTEGER,
+        maxNameLength: 200,
+      });
 
       expect(roundTripped).toEqual(canonical);
     },

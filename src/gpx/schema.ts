@@ -1,18 +1,14 @@
 import { GpxNormalizationError } from "./errors.js";
-import {
-  MAX_LATITUDE,
-  MAX_LONGITUDE,
-  MAX_NAME_LENGTH,
-  MAX_POINTS_PER_ROUTE,
-  MAX_POINTS_PER_SEGMENT,
-  MAX_ROUTES,
-  MAX_SEGMENTS_PER_TRACK,
-  MAX_TRACKS,
-  MAX_WAYPOINTS,
-  MIN_LATITUDE,
-  MIN_LONGITUDE,
-} from "./limits.js";
 import type { CanonicalCoordinates, CanonicalGpxDocument } from "./canonicalize.js";
+
+export const MIN_LONGITUDE = -180;
+export const MAX_LONGITUDE = 180;
+export const MIN_LATITUDE = -90;
+export const MAX_LATITUDE = 90;
+export const MAX_NAME_LENGTH = 200;
+
+// Schema-level hard limits remain enforced here even if runtime config validation is
+// bypassed, so canonical documents cannot exceed the GPX domain constraints.
 
 function fail(reason: string): never {
   throw new GpxNormalizationError(`invalid canonical GPX document: ${reason}`);
@@ -62,8 +58,9 @@ function assertOptionalTime(value: unknown, path: string): void {
   }
 }
 
-// Structural/defensive validation only — mirrors the invariants Anemochore enforces
-// independently on the same canonical payload; this is not GPX semantic validation.
+// Canonical payload validation only.
+// This validates representation safety and structural consistency;
+// it does not attempt full GPX semantic validation.
 export function assertValidCanonicalGpxDocument(
   value: unknown,
 ): asserts value is CanonicalGpxDocument {
@@ -85,8 +82,8 @@ export function assertValidCanonicalGpxDocument(
 
   const { tracks, routes, waypoints } = value.data;
 
-  if (!Array.isArray(tracks) || tracks.length > MAX_TRACKS) {
-    fail(`data.tracks must be an array of at most ${MAX_TRACKS} tracks`);
+  if (!Array.isArray(tracks)) {
+    fail("data.tracks must be an array");
   }
 
   tracks.forEach((track, trackIndex) => {
@@ -96,8 +93,8 @@ export function assertValidCanonicalGpxDocument(
 
     assertOptionalName(track.name, `data.tracks[${trackIndex}].name`);
 
-    if (!Array.isArray(track.segments) || track.segments.length === 0 || track.segments.length > MAX_SEGMENTS_PER_TRACK) {
-      fail(`data.tracks[${trackIndex}].segments must be a non-empty array of at most ${MAX_SEGMENTS_PER_TRACK} segments`);
+    if (!Array.isArray(track.segments) || track.segments.length === 0) {
+      fail(`data.tracks[${trackIndex}].segments must be a non-empty array`);
     }
 
     track.segments.forEach((segment: unknown, segmentIndex: number) => {
@@ -105,8 +102,8 @@ export function assertValidCanonicalGpxDocument(
         fail(`data.tracks[${trackIndex}].segments[${segmentIndex}] must be an object`);
       }
 
-      if (!Array.isArray(segment.points) || segment.points.length === 0 || segment.points.length > MAX_POINTS_PER_SEGMENT) {
-        fail(`data.tracks[${trackIndex}].segments[${segmentIndex}].points must be a non-empty array of at most ${MAX_POINTS_PER_SEGMENT} points`);
+      if (!Array.isArray(segment.points) || segment.points.length === 0) {
+        fail(`data.tracks[${trackIndex}].segments[${segmentIndex}].points must be a non-empty array`);
       }
 
       segment.points.forEach((point: unknown, pointIndex: number) => {
@@ -121,8 +118,8 @@ export function assertValidCanonicalGpxDocument(
     });
   });
 
-  if (!Array.isArray(routes) || routes.length > MAX_ROUTES) {
-    fail(`data.routes must be an array of at most ${MAX_ROUTES} routes`);
+  if (!Array.isArray(routes)) {
+    fail("data.routes must be an array");
   }
 
   routes.forEach((route, routeIndex) => {
@@ -132,8 +129,8 @@ export function assertValidCanonicalGpxDocument(
 
     assertOptionalName(route.name, `data.routes[${routeIndex}].name`);
 
-    if (!Array.isArray(route.points) || route.points.length === 0 || route.points.length > MAX_POINTS_PER_ROUTE) {
-      fail(`data.routes[${routeIndex}].points must be a non-empty array of at most ${MAX_POINTS_PER_ROUTE} points`);
+    if (!Array.isArray(route.points) || route.points.length === 0) {
+      fail(`data.routes[${routeIndex}].points must be a non-empty array`);
     }
 
     route.points.forEach((point: unknown, pointIndex: number) => {
@@ -146,8 +143,8 @@ export function assertValidCanonicalGpxDocument(
     });
   });
 
-  if (!Array.isArray(waypoints) || waypoints.length > MAX_WAYPOINTS) {
-    fail(`data.waypoints must be an array of at most ${MAX_WAYPOINTS} waypoints`);
+  if (!Array.isArray(waypoints)) {
+    fail("data.waypoints must be an array");
   }
 
   waypoints.forEach((waypoint, waypointIndex) => {

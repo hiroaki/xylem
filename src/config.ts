@@ -1,3 +1,8 @@
+import type { GpxPolicy } from "./policy.js";
+import { MAX_NAME_LENGTH } from "./gpx/schema.js";
+
+const DEFAULT_MAX_RAW_GPX_BYTES = 2 * 1024 * 1024;
+
 export type LogLevel =
   | "trace"
   | "debug"
@@ -16,6 +21,7 @@ export type Config = {
   xylemTrustProxy: boolean;
   xylemTrustedClientIpHeader: string;
   logLevel: LogLevel;
+  gpxPolicy: GpxPolicy;
 };
 
 function requiredEnv(name: string): string {
@@ -67,7 +73,34 @@ function parseLogLevel(value: string): LogLevel {
   }
 }
 
+function parsePositiveInteger(name: string, value: string | undefined, fallback: number): number {
+  const raw = value ?? String(fallback);
+  const parsed = Number(raw);
+
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`Invalid ${name}: ${raw}`);
+  }
+
+  return parsed;
+}
+
+function validateGpxPolicy(limits: GpxPolicy): void {
+  if (limits.maxNameLength > MAX_NAME_LENGTH) {
+    throw new Error(
+      `GpxPolicy.maxNameLength (${limits.maxNameLength}) exceeds schema hard limit (${MAX_NAME_LENGTH})`,
+    );
+  }
+}
+
 export function getConfig(): Config {
+  const gpxPolicy: GpxPolicy = {
+    maxRawBytes: parsePositiveInteger("XYLEM_GPX_MAX_RAW_BYTES", process.env.XYLEM_GPX_MAX_RAW_BYTES, DEFAULT_MAX_RAW_GPX_BYTES),
+    maxTotalPoints: parsePositiveInteger("XYLEM_GPX_MAX_TOTAL_POINTS", process.env.XYLEM_GPX_MAX_TOTAL_POINTS, 50_000),
+    maxNameLength: parsePositiveInteger("XYLEM_GPX_MAX_NAME_LENGTH", process.env.XYLEM_GPX_MAX_NAME_LENGTH, MAX_NAME_LENGTH),
+  };
+
+  validateGpxPolicy(gpxPolicy);
+
   return {
     anemochoreApiUrl: requiredUrlEnv("ANEMOCHORE_API_URL"),
     anemochoreApiKey: requiredEnv("ANEMOCHORE_API_KEY"),
@@ -77,5 +110,6 @@ export function getConfig(): Config {
     xylemTrustProxy: parseBoolean(process.env.XYLEM_TRUST_PROXY ?? "false"),
     xylemTrustedClientIpHeader: process.env.XYLEM_TRUSTED_CLIENT_IP_HEADER ?? "X-Forwarded-For",
     logLevel: parseLogLevel(process.env.LOG_LEVEL ?? "info"),
+    gpxPolicy,
   };
 }

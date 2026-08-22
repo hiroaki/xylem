@@ -3,6 +3,8 @@ import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import { canonicalizeGpx } from "../src/gpx/canonicalize.js";
+import { parseGpxXml } from "../src/gpx/parse.js";
+import { assertSafeGpxXml } from "../src/gpx/xml-security-filter.js";
 
 function fixture(name: string): string {
   return readFileSync(
@@ -13,7 +15,11 @@ function fixture(name: string): string {
 
 describe("canonicalizeGpx", () => {
   it("extracts tracks, segments, points, routes, and waypoints while stripping metadata", () => {
-    const result = canonicalizeGpx(fixture("sample.gpx"));
+    const result = canonicalizeGpx(parseGpxXml(fixture("sample.gpx")), {
+      maxRawBytes: 2 * 1024 * 1024,
+      maxTotalPoints: Number.MAX_SAFE_INTEGER,
+      maxNameLength: 200,
+    });
 
     expect(result).toEqual({
       schema_version: 1,
@@ -58,19 +64,28 @@ describe("canonicalizeGpx", () => {
   });
 
   it("rejects a GPX document with no tracks, routes, or waypoints", () => {
-    expect(() => canonicalizeGpx(fixture("empty.gpx"))).toThrow();
+    expect(() =>
+      canonicalizeGpx(parseGpxXml(fixture("empty.gpx")), {
+        maxRawBytes: 2 * 1024 * 1024,
+        maxTotalPoints: Number.MAX_SAFE_INTEGER,
+        maxNameLength: 200,
+      }),
+    ).toThrow();
   });
 
   it("rejects malformed XML", () => {
-    expect(() => canonicalizeGpx(fixture("malformed.gpx"))).toThrow();
+    expect(() => {
+      const malformed = fixture("malformed.gpx");
+      parseGpxXml(malformed);
+    }).toThrow();
   });
 
   it("rejects DOCTYPE-laden input before parsing", () => {
-    expect(() => canonicalizeGpx(fixture("doctype.gpx"))).toThrow();
+    expect(() => assertSafeGpxXml(fixture("doctype.gpx"), 2 * 1024 * 1024)).toThrow();
   });
 
   it("rejects ENTITY-laden input before parsing", () => {
-    expect(() => canonicalizeGpx(fixture("entity.gpx"))).toThrow();
+    expect(() => assertSafeGpxXml(fixture("entity.gpx"), 2 * 1024 * 1024)).toThrow();
   });
 
   it("drops points with non-finite or out-of-range coordinates instead of failing the whole track", () => {
@@ -81,7 +96,11 @@ describe("canonicalizeGpx", () => {
   <trkpt lat="35.1" lon="135.1" />
 </trkseg></trk></gpx>`;
 
-    const result = canonicalizeGpx(gpx);
+    const result = canonicalizeGpx(parseGpxXml(gpx), {
+      maxRawBytes: 2 * 1024 * 1024,
+      maxTotalPoints: Number.MAX_SAFE_INTEGER,
+      maxNameLength: 200,
+    });
 
     expect(result.data.tracks).toHaveLength(1);
     expect(result.data.tracks[0]?.segments[0]?.points).toEqual([
@@ -96,7 +115,11 @@ describe("canonicalizeGpx", () => {
   <trkseg><trkpt lat="36.0" lon="136.0" /></trkseg>
 </trk></gpx>`;
 
-    const result = canonicalizeGpx(gpx);
+    const result = canonicalizeGpx(parseGpxXml(gpx), {
+      maxRawBytes: 2 * 1024 * 1024,
+      maxTotalPoints: Number.MAX_SAFE_INTEGER,
+      maxNameLength: 200,
+    });
 
     expect(result.data.tracks[0]?.segments).toHaveLength(2);
   });
@@ -108,7 +131,11 @@ describe("canonicalizeGpx", () => {
   <trkseg><trkpt lat="35.0" lon="135.0" /></trkseg>
 </trk></gpx>`;
 
-    const withEmptySegment = canonicalizeGpx(emptySegmentGpx);
+    const withEmptySegment = canonicalizeGpx(parseGpxXml(emptySegmentGpx), {
+      maxRawBytes: 2 * 1024 * 1024,
+      maxTotalPoints: Number.MAX_SAFE_INTEGER,
+      maxNameLength: 200,
+    });
     expect(withEmptySegment.data.tracks[0]?.segments).toHaveLength(1);
 
     const onlyEmptySegmentsGpx = `<?xml version="1.0"?>
@@ -117,27 +144,77 @@ describe("canonicalizeGpx", () => {
   <wpt lat="35.0" lon="135.0" />
 </gpx>`;
 
-    const withDroppedTrack = canonicalizeGpx(onlyEmptySegmentsGpx);
+    const withDroppedTrack = canonicalizeGpx(parseGpxXml(onlyEmptySegmentsGpx), {
+      maxRawBytes: 2 * 1024 * 1024,
+      maxTotalPoints: Number.MAX_SAFE_INTEGER,
+      maxNameLength: 200,
+    });
     expect(withDroppedTrack.data.tracks).toHaveLength(0);
     expect(withDroppedTrack.data.waypoints).toHaveLength(1);
   });
 
   it("is deterministic across repeated calls on the same input", () => {
     const input = fixture("sample.gpx");
-    const results = Array.from({ length: 5 }, () => canonicalizeGpx(input));
+    const results = Array.from({ length: 5 }, () => canonicalizeGpx(parseGpxXml(input), {
+      maxRawBytes: 2 * 1024 * 1024,
+      maxTotalPoints: Number.MAX_SAFE_INTEGER,
+      maxNameLength: 200,
+    }));
 
     for (const result of results.slice(1)) {
       expect(result).toEqual(results[0]);
     }
   });
 
+  it("rejects a GPX document when the total point budget is exceeded during traversal", () => {
+    const document = parseGpxXml(`<?xml version="1.0"?>
+<gpx version="1.1"><trk><trkseg>
+  <trkpt lat="35.0" lon="135.0" />
+  <trkpt lat="35.1" lon="135.1" />
+  <trkpt lat="35.2" lon="135.2" />
+</trkseg></trk></gpx>`);
+
+    expect(() =>
+      canonicalizeGpx(document, {
+        maxRawBytes: 2 * 1024 * 1024,
+        maxTotalPoints: 2,
+        maxNameLength: 200,
+      }),
+    ).toThrow();
+  });
+
+  it("counts invalid points toward the traversal budget before discarding them", () => {
+    const document = parseGpxXml(`<?xml version="1.0"?>
+<gpx version="1.1"><trk><trkseg>
+  <trkpt lat="NaN" lon="135.0" />
+  <trkpt lat="NaN" lon="135.0" />
+  <trkpt lat="NaN" lon="135.0" />
+</trkseg></trk></gpx>`);
+
+    expect(() =>
+      canonicalizeGpx(document, {
+        maxRawBytes: 2 * 1024 * 1024,
+        maxTotalPoints: 2,
+        maxNameLength: 200,
+      }),
+    ).toThrow();
+  });
+
   it("is deterministic even if wall-clock time changes between calls", () => {
     const input = fixture("sample.gpx");
-    const first = canonicalizeGpx(input);
+    const first = canonicalizeGpx(parseGpxXml(input), {
+      maxRawBytes: 2 * 1024 * 1024,
+      maxTotalPoints: Number.MAX_SAFE_INTEGER,
+      maxNameLength: 200,
+    });
 
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2099-01-01T00:00:00Z"));
-    const second = canonicalizeGpx(input);
+    const second = canonicalizeGpx(parseGpxXml(input), {
+      maxRawBytes: 2 * 1024 * 1024,
+      maxTotalPoints: Number.MAX_SAFE_INTEGER,
+      maxNameLength: 200,
+    });
     vi.useRealTimers();
 
     expect(second).toEqual(first);

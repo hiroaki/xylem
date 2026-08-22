@@ -3,7 +3,8 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { assertSafeGpxXml } from "../src/gpx/xml-security-filter.js";
-import { MAX_RAW_GPX_BYTES } from "../src/gpx/limits.js";
+
+const MAX_RAW_GPX_BYTES = 2 * 1024 * 1024;
 
 function fixture(name: string): string {
   return readFileSync(
@@ -14,15 +15,15 @@ function fixture(name: string): string {
 
 describe("assertSafeGpxXml", () => {
   it("allows a benign GPX document", () => {
-    expect(() => assertSafeGpxXml(fixture("sample.gpx"))).not.toThrow();
+    expect(() => assertSafeGpxXml(fixture("sample.gpx"), MAX_RAW_GPX_BYTES)).not.toThrow();
   });
 
   it("rejects DOCTYPE declarations", () => {
-    expect(() => assertSafeGpxXml(fixture("doctype.gpx"))).toThrow();
+    expect(() => assertSafeGpxXml(fixture("doctype.gpx"), MAX_RAW_GPX_BYTES)).toThrow();
   });
 
   it("rejects ENTITY declarations", () => {
-    expect(() => assertSafeGpxXml(fixture("entity.gpx"))).toThrow();
+    expect(() => assertSafeGpxXml(fixture("entity.gpx"), MAX_RAW_GPX_BYTES)).toThrow();
   });
 
   it("rejects nested/parameter entity variants", () => {
@@ -33,18 +34,18 @@ describe("assertSafeGpxXml", () => {
 ]>
 <gpx></gpx>`;
 
-    expect(() => assertSafeGpxXml(parameterEntity)).toThrow();
+    expect(() => assertSafeGpxXml(parameterEntity, MAX_RAW_GPX_BYTES)).toThrow();
   });
 
   it("rejects input exceeding the byte-length cap", () => {
     const oversized = `<gpx>${"a".repeat(MAX_RAW_GPX_BYTES + 1)}</gpx>`;
 
-    expect(() => assertSafeGpxXml(oversized)).toThrow();
+    expect(() => assertSafeGpxXml(oversized, MAX_RAW_GPX_BYTES)).toThrow();
   });
 
   it("does not reject well-formed input at or under the byte-length cap", () => {
     const atCap = "a".repeat(MAX_RAW_GPX_BYTES - "<gpx></gpx>".length);
 
-    expect(() => assertSafeGpxXml(`<gpx>${atCap}</gpx>`)).not.toThrow();
+    expect(() => assertSafeGpxXml(`<gpx>${atCap}</gpx>`, MAX_RAW_GPX_BYTES)).not.toThrow();
   });
 });

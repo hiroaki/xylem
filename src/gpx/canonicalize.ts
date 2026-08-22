@@ -1,4 +1,3 @@
-import { parseGpxXml } from "./parse.js";
 import type {
   GpxDocumentNode,
   GpxPointNode,
@@ -6,19 +5,13 @@ import type {
   GpxTrackNode,
 } from "./parse.js";
 import { GpxNormalizationError } from "./errors.js";
+import type { GpxPolicy } from "../policy.js";
 import {
   MAX_LATITUDE,
   MAX_LONGITUDE,
-  MAX_NAME_LENGTH,
-  MAX_POINTS_PER_ROUTE,
-  MAX_POINTS_PER_SEGMENT,
-  MAX_ROUTES,
-  MAX_SEGMENTS_PER_TRACK,
-  MAX_TRACKS,
-  MAX_WAYPOINTS,
   MIN_LATITUDE,
   MIN_LONGITUDE,
-} from "./limits.js";
+} from "./schema.js";
 
 export type CanonicalCoordinates =
   | [number, number]
@@ -66,15 +59,17 @@ export type CanonicalGpxDocument = {
 
 const CONTROL_CHARACTERS_PATTERN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
 
-function normalizeName(raw: string | undefined): string | undefined {
+function normalizeName(raw: string | undefined, policy: GpxPolicy): string | undefined {
   if (raw === undefined) {
     return undefined;
   }
 
+  // Names are intentionally truncated during normalization to enforce the
+  // canonical representation length policy.
   const cleaned = raw
     .replace(CONTROL_CHARACTERS_PATTERN, "")
     .trim()
-    .slice(0, MAX_NAME_LENGTH);
+    .slice(0, policy.maxNameLength);
 
   return cleaned.length > 0 ? cleaned : undefined;
 }
@@ -113,15 +108,30 @@ function toTime(raw: string | undefined): string | undefined {
   return Number.isFinite(Date.parse(trimmed)) ? trimmed : undefined;
 }
 
-function canonicalizeTrack(node: GpxTrackNode): CanonicalTrack | null {
+function canonicalizeTrack(node: GpxTrackNode, policy: GpxPolicy, totalPointBudget: { count: number }): CanonicalTrack | null {
   const segments: CanonicalSegment[] = [];
 
-  for (const segmentNode of (node.trkseg ?? []).slice(0, MAX_SEGMENTS_PER_TRACK)) {
+  for (const segmentNode of node.trkseg ?? []) {
     const points: CanonicalPoint[] = [];
 
-    for (const pointNode of (segmentNode.trkpt ?? []).slice(0, MAX_POINTS_PER_SEGMENT)) {
+    for (const pointNode of segmentNode.trkpt ?? []) {
+      // maxTotalPoints is an operational traversal budget, not a GPX schema rule.
+      // It counts raw GPX points encountered during traversal before coordinate
+      // validation, so invalid points still consume the budget and malformed input
+      // cannot bypass resource limits by being discarded after parsing.
+      // Consume the traversal budget before validation.
+      // Invalid points still count because the budget protects against
+      // expensive input traversal, not only canonical output size.
+      totalPointBudget.count += 1;
+
+      if (totalPointBudget.count > policy.maxTotalPoints) {
+        throw new GpxNormalizationError("file exceeds max total points");
+      }
+
       const coordinates = toCoordinates(pointNode);
       if (!coordinates) {
+        // Invalid coordinate points are intentionally dropped during normalization
+        // so a single malformed point does not invalidate the rest of a track.
         continue;
       }
 
@@ -138,14 +148,20 @@ function canonicalizeTrack(node: GpxTrackNode): CanonicalTrack | null {
     return null;
   }
 
-  const name = normalizeName(node.name);
+  const name = normalizeName(node.name, policy);
   return name ? { name, segments } : { segments };
 }
 
-function canonicalizeRoute(node: GpxRouteNode): CanonicalRoute | null {
+function canonicalizeRoute(node: GpxRouteNode, policy: GpxPolicy, totalPointBudget: { count: number }): CanonicalRoute | null {
   const points: CanonicalRoutePoint[] = [];
 
-  for (const pointNode of (node.rtept ?? []).slice(0, MAX_POINTS_PER_ROUTE)) {
+  for (const pointNode of node.rtept ?? []) {
+    totalPointBudget.count += 1;
+
+    if (totalPointBudget.count > policy.maxTotalPoints) {
+      throw new GpxNormalizationError("file exceeds max total points");
+    }
+
     const coordinates = toCoordinates(pointNode);
     if (coordinates) {
       points.push({ coordinates });
@@ -156,39 +172,46 @@ function canonicalizeRoute(node: GpxRouteNode): CanonicalRoute | null {
     return null;
   }
 
-  const name = normalizeName(node.name);
+  const name = normalizeName(node.name, policy);
   return name ? { name, points } : { points };
 }
 
-function canonicalizeWaypoint(node: GpxPointNode): CanonicalWaypoint | null {
+function canonicalizeWaypoint(node: GpxPointNode, policy: GpxPolicy, totalPointBudget: { count: number }): CanonicalWaypoint | null {
+  totalPointBudget.count += 1;
+
+  if (totalPointBudget.count > policy.maxTotalPoints) {
+    throw new GpxNormalizationError("file exceeds max total points");
+  }
+
   const coordinates = toCoordinates(node);
   if (!coordinates) {
     return null;
   }
 
-  const name = normalizeName(node.name);
+  const name = normalizeName(node.name, policy);
   return name ? { coordinates, name } : { coordinates };
 }
 
 // Single source of truth: /api/normalize and /api/upload must both call this
 // function (never a route-local variant) so preview and stored data always match.
-// Pure and deterministic: no wall-clock/random values, source-document order preserved.
-export function canonicalizeGpx(rawText: string): CanonicalGpxDocument {
-  const document: GpxDocumentNode = parseGpxXml(rawText);
+// The function receives a parsed document and explicit policy values so it can
+// enforce operational budgets during canonicalization without accessing config.
+export function canonicalizeGpx(
+  document: GpxDocumentNode,
+  policy: GpxPolicy,
+): CanonicalGpxDocument {
+  const totalPointBudget = { count: 0 };
 
   const tracks = (document.trk ?? [])
-    .slice(0, MAX_TRACKS)
-    .map(canonicalizeTrack)
+    .map((track) => canonicalizeTrack(track, policy, totalPointBudget))
     .filter((track): track is CanonicalTrack => track !== null);
 
   const routes = (document.rte ?? [])
-    .slice(0, MAX_ROUTES)
-    .map(canonicalizeRoute)
+    .map((route) => canonicalizeRoute(route, policy, totalPointBudget))
     .filter((route): route is CanonicalRoute => route !== null);
 
   const waypoints = (document.wpt ?? [])
-    .slice(0, MAX_WAYPOINTS)
-    .map(canonicalizeWaypoint)
+    .map((waypoint) => canonicalizeWaypoint(waypoint, policy, totalPointBudget))
     .filter((waypoint): waypoint is CanonicalWaypoint => waypoint !== null);
 
   if (tracks.length === 0 && routes.length === 0 && waypoints.length === 0) {

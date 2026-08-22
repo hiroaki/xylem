@@ -3,9 +3,11 @@ import { getConfig } from "../config.js";
 import { createAnemochoreClient } from "../services/anemochore.js";
 import { createDeleteToken } from "../utils/delete-token.js";
 import { buildDeleteUrl } from "../utils/delete-url.js";
-import { canonicalizeGpx } from "../gpx/canonicalize.js";
+import { canonicalizeGpx, type CanonicalGpxDocument } from "../gpx/canonicalize.js";
 import { assertValidCanonicalGpxDocument } from "../gpx/schema.js";
 import { GpxNormalizationError } from "../gpx/errors.js";
+import { parseGpxXml } from "../gpx/parse.js";
+import { assertSafeGpxXml } from "../gpx/xml-security-filter.js";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import {
   emitAuditEvent,
@@ -44,11 +46,13 @@ upload.post("/api/upload", async (c) => {
 
   // Xylem is the sole GPX parse/validate/normalize boundary; Anemochore only
   // ever sees the canonical payload derived here, never the original bytes.
-  let canonicalDocument;
+  let canonicalDocument: CanonicalGpxDocument;
 
   try {
     const rawText = await file.text();
-    canonicalDocument = canonicalizeGpx(rawText);
+    assertSafeGpxXml(rawText, config.gpxPolicy.maxRawBytes);
+    const document = parseGpxXml(rawText);
+    canonicalDocument = canonicalizeGpx(document, config.gpxPolicy);
     assertValidCanonicalGpxDocument(canonicalDocument);
   } catch (error) {
     const message =

@@ -3,9 +3,13 @@ import { canonicalizeGpx } from "../gpx/canonicalize.js";
 import { assertValidCanonicalGpxDocument } from "../gpx/schema.js";
 import { serializeGpx } from "../gpx/serialize.js";
 import { GpxNormalizationError } from "../gpx/errors.js";
+import { parseGpxXml } from "../gpx/parse.js";
+import { assertSafeGpxXml } from "../gpx/xml-security-filter.js";
 import { emitAuditEvent } from "../logging/audit-event.js";
+import { getConfig } from "../config.js";
 
 const normalize = new Hono();
+const config = getConfig();
 
 normalize.post("/api/normalize", async (c) => {
   const formData = await c.req.raw.formData();
@@ -33,7 +37,9 @@ normalize.post("/api/normalize", async (c) => {
 
   try {
     const rawText = await file.text();
-    const canonical = canonicalizeGpx(rawText);
+    assertSafeGpxXml(rawText, config.gpxPolicy.maxRawBytes);
+    const document = parseGpxXml(rawText);
+    const canonical = canonicalizeGpx(document, config.gpxPolicy);
     assertValidCanonicalGpxDocument(canonical);
     gpxXml = serializeGpx(canonical);
   } catch (error) {

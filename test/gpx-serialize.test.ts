@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { canonicalizeGpx } from "../src/gpx/canonicalize.js";
+import { parseGpxXml } from "../src/gpx/parse.js";
 import { serializeGpx } from "../src/gpx/serialize.js";
 import type { CanonicalGpxDocument } from "../src/gpx/canonicalize.js";
 
@@ -37,7 +38,11 @@ describe("serializeGpx", () => {
     expect(xml).toContain('<wpt lat="35.01" lon="135.01">');
     expect(xml).toContain("<name>Start marker</name>");
 
-    const reCanonicalized = canonicalizeGpx(xml);
+    const reCanonicalized = canonicalizeGpx(parseGpxXml(xml), {
+      maxRawBytes: 2 * 1024 * 1024,
+      maxTotalPoints: Number.MAX_SAFE_INTEGER,
+      maxNameLength: 200,
+    });
     expect(reCanonicalized.data.tracks[0]?.segments[0]?.points).toHaveLength(2);
   });
 
@@ -60,7 +65,11 @@ describe("serializeGpx", () => {
     expect(xml).not.toContain("]]></wpt>");
     expect(xml).toContain("Tom &amp; Jerry &lt;script&gt;");
 
-    const reCanonicalized = canonicalizeGpx(xml);
+    const reCanonicalized = canonicalizeGpx(parseGpxXml(xml), {
+      maxRawBytes: 2 * 1024 * 1024,
+      maxTotalPoints: Number.MAX_SAFE_INTEGER,
+      maxNameLength: 200,
+    });
     expect(reCanonicalized.data.waypoints[0]?.name).toBe(
       "Tom & Jerry <script>]]></wpt>",
     );

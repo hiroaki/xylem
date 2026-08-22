@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Hono } from "hono";
 import { canonicalizeGpx } from "../src/gpx/canonicalize.js";
+import { parseGpxXml } from "../src/gpx/parse.js";
 
 function fixture(name: string): string {
   return readFileSync(
@@ -45,6 +46,11 @@ describe("normalize/upload canonicalization consistency", () => {
     const app = await setupApp();
     const fetchMock = vi.mocked(globalThis.fetch);
     const gpxText = fixture("sample.gpx");
+    const TEST_GPX_POLICY = {
+      maxRawBytes: 2 * 1024 * 1024,
+      maxTotalPoints: 50_000,
+      maxNameLength: 200,
+    };
 
     // What /api/normalize would show the user, re-canonicalized (as a browser
     // re-parsing the returned GPX through Tilia effectively "sees").
@@ -53,7 +59,7 @@ describe("normalize/upload canonicalization consistency", () => {
       body: buildFormData(gpxText),
     });
     const normalizedGpxXml = await normalizeResponse.text();
-    const reCanonicalizedFromPreview = canonicalizeGpx(normalizedGpxXml);
+    const reCanonicalizedFromPreview = canonicalizeGpx(parseGpxXml(normalizedGpxXml), TEST_GPX_POLICY);
 
     // What /api/upload actually sends to Anemochore for storage.
     fetchMock.mockResolvedValueOnce(
