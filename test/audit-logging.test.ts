@@ -188,7 +188,7 @@ describe("audit logging", () => {
         },
       },
     );
-    expect(deletionResponse.status).toBe(204);
+    expect(deletionResponse.status).toBe(200);
 
     const uploadCompleted = entries.find((entry) =>
       entry.obj.event === "anemochore_upload_completed" &&

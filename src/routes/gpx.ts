@@ -182,10 +182,27 @@ gpx.delete("/api/gpx/:id", async (c) => {
       : {}),
   });
 
-  return new Response(response.body, {
-    status: response.status,
-    headers: response.headers,
-  });
+  if (response.ok) {
+    return c.json({
+      deleted: true,
+    });
+  }
+
+  if (response.status === 404 || response.status === 410) {
+    return c.json(
+      {
+        error: "gpx_not_found",
+      },
+      404,
+    );
+  }
+
+  return c.json(
+    {
+      error: "delete_failed",
+    },
+    502,
+  );
 });
 
 export default gpx;
