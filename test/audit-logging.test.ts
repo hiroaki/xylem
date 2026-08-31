@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
 
 import type { BaseLogger } from "@hono/structured-logger";
 import type { Hono } from "hono";
 import { createDeleteToken } from "../src/utils/delete-token.js";
+import { normalizeUserAgent } from "../src/middlewares/client-user-agent.js";
 
 type LogEntry = {
   level: "info" | "warn" | "error" | "debug";
@@ -499,6 +501,95 @@ describe("audit logging", () => {
     );
 
     expect(trustRequestLog?.obj.client_ip).toBe("203.0.113.77");
+  });
+
+  it("records normalized user-agent metadata in audit logs", async () => {
+    const { app, entries } = await setupApp();
+
+    const userAgent =
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " +
+      "AppleWebKit/537.36 (KHTML, like Gecko) " +
+      "Chrome/151.0.0.0 Safari/537.36";
+
+    const res = await app.request(
+      "http://localhost/api/gpx/gpx-ua-100",
+      {
+        method: "GET",
+        headers: {
+          "User-Agent": userAgent,
+        },
+      },
+    );
+
+    expect(res.status).toBe(500);
+
+    const requestLog = entries.find(
+      (entry) => entry.obj.event === "request_received",
+    );
+
+    expect(requestLog?.obj.user_agent).toBe(userAgent);
+    expect(requestLog?.obj.user_agent_truncated).toBe(false);
+    expect(requestLog?.obj.user_agent_sha256).toBe(
+      createHash("sha256")
+        .update(Buffer.from(userAgent, "latin1"))
+        .digest("hex"),
+    );
+    expect(requestLog?.obj.user_agent_raw_length).toBe(
+      Buffer.byteLength(userAgent, "latin1"),
+    );
+  });
+
+  it("preserves literal percent sequences and percent-encodes non-ASCII bytes", () => {
+    const userAgent =
+      "Test/%E6%97%A5%6C " +
+      String.fromCharCode(0xe6, 0x97, 0xa5);
+
+    const normalized = normalizeUserAgent(userAgent);
+
+    expect(normalized.value).toBe(
+      "Test/%25E6%2597%25A5%256C %E6%97%A5",
+    );
+    expect(normalized.truncated).toBe(false);
+
+    const rawBytes = Buffer.from(userAgent, "latin1");
+
+    expect(normalized.rawLength).toBe(rawBytes.length);
+    expect(normalized.sha256).toBe(
+      createHash("sha256").update(rawBytes).digest("hex"),
+    );
+  });
+
+  it("truncates encoded user-agent at 512 bytes without cutting an escape sequence", () => {
+    const userAgent =
+      "A".repeat(508) +
+      String.fromCharCode(0xe6, 0x97, 0xa5) +
+      "A".repeat(100); // Additional padding to exceed 512 bytes after encoding
+
+    const normalized = normalizeUserAgent(userAgent);
+
+    expect(normalized.truncated).toBe(true);
+
+    // 508 ASCII bytes + one complete %E6 escape token (3 bytes)
+    // fit within the 512-byte encoded log limit.
+    // The next %97 token would exceed the limit.
+    expect(normalized.value).toBe(
+      `${"A".repeat(508)}%E6`,
+    );
+
+    expect(
+      Buffer.byteLength(normalized.value, "utf8"),
+    ).toBe(511);
+
+    // The encoded value must never end with an incomplete %XX escape.
+    expect(normalized.value).not.toMatch(/%[0-9A-Fa-f]?$/);
+
+    const rawBytes = Buffer.from(userAgent, "latin1");
+
+    expect(normalized.rawLength).toBe(611); // 508 + 3 + 100
+    expect(normalized.rawLength).toBe(rawBytes.length);
+    expect(normalized.sha256).toBe(
+      createHash("sha256").update(rawBytes).digest("hex"),
+    );
   });
 
   it("does not emit audit events for static asset requests", async () => {
