@@ -59,6 +59,18 @@ function createRequestLogger(c: Context) {
     service: "xylem",
     request_id: c.var.requestId,
     ...(c.var.clientIp ? { client_ip: c.var.clientIp } : {}),
+    ...(c.var.userAgent
+      ? { user_agent: c.var.userAgent }
+      : {}),
+    ...(c.var.userAgentTruncated !== undefined
+      ? { user_agent_truncated: c.var.userAgentTruncated }
+      : {}),
+    ...(c.var.userAgentSha256
+      ? { user_agent_sha256: c.var.userAgentSha256 }
+      : {}),
+    ...(c.var.userAgentRawLength !== undefined
+      ? { user_agent_raw_length: c.var.userAgentRawLength }
+      : {}),
     method: c.req.method,
     path: c.req.path,
   });

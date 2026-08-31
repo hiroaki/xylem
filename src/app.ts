@@ -8,6 +8,7 @@ import health from "./routes/health.js";
 import normalize from "./routes/normalize.js";
 import { getConfig } from "./config.js";
 import { clientIpMiddleware } from "./middlewares/client-ip.js";
+import { clientUserAgentMiddleware } from "./middlewares/client-user-agent.js";
 import { auditLoggerMiddleware } from "./middlewares/audit-logger.js";
 
 export function createApp(): Hono {
@@ -22,6 +23,7 @@ export function createApp(): Hono {
   );
 
   app.use("/*", clientIpMiddleware);
+  app.use("/*", clientUserAgentMiddleware);
 
   app.use("/api/upload", auditLoggerMiddleware);
   app.use("/api/gpx/*", auditLoggerMiddleware);
