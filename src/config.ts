@@ -22,6 +22,7 @@ export type Config = {
   xylemTrustedClientIpHeader: string;
   logLevel: LogLevel;
   gpxPolicy: GpxPolicy;
+  chloroplastPublicOrigin: string;
 };
 
 function requiredEnv(name: string): string {
@@ -111,5 +112,6 @@ export function getConfig(): Config {
     xylemTrustedClientIpHeader: process.env.XYLEM_TRUSTED_CLIENT_IP_HEADER ?? "X-Forwarded-For",
     logLevel: parseLogLevel(process.env.LOG_LEVEL ?? "info"),
     gpxPolicy,
+    chloroplastPublicOrigin: requiredUrlEnv("CHLOROPLAST_PUBLIC_ORIGIN"),
   };
 }

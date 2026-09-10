@@ -6,6 +6,7 @@ import upload from "./routes/upload.js";
 import gpx from "./routes/gpx.js";
 import health from "./routes/health.js";
 import normalize from "./routes/normalize.js";
+import share from "./routes/share.js";
 import { getConfig } from "./config.js";
 import { clientIpMiddleware } from "./middlewares/client-ip.js";
 import { clientUserAgentMiddleware } from "./middlewares/client-user-agent.js";
@@ -33,6 +34,7 @@ export function createApp(): Hono {
   app.route("/", gpx);
   app.route("/", health);
   app.route("/", normalize);
+  app.route("/", share);
 
   app.use(
     "/*",
