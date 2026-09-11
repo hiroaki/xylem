@@ -43,7 +43,9 @@ export function createApp(): Hono {
     }),
   );
 
-  app.onError((_, c) => {
+  app.onError((error, c) => {
+    console.error("Unhandled application error:", error);
+
     return c.json(
       {
         error: "Internal Server Error",
