@@ -37,6 +37,3 @@ coverage
 
 # Docker files not needed inside image context
 Dockerfile
-
-# default SHARE_CACHE_DIR
-cache

@@ -8,7 +8,7 @@ import { createAnemochoreClient } from "../services/anemochore.js";
 const router = new Hono();
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-const CACHE_DIR = process.env.SHARE_CACHE_DIR ?? "./cache";
+const CACHE_DIR = process.env.SHARE_CACHE_DIR ?? "/tmp/gpx-share";
 
 const inFlight = new Map<string, Promise<string | null>>();
 

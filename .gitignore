@@ -26,8 +26,3 @@ lerna-debug.log*
 
 # misc
 .DS_Store
-
-# default SHARE_CACHE_DIR
-cache/*
-!cache/.keep
-
