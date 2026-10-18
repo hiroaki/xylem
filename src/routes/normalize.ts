@@ -1,6 +1,5 @@
 import { Hono } from "hono";
-import { processGpxFile } from "../gpx/process.js";
-import { serializeGpx } from "../gpx/serialize.js";
+import { prepareCanonicalGpx, processGpxFile } from "../gpx/process.js";
 import { GpxNormalizationError } from "../gpx/errors.js";
 import { emitAuditEvent } from "../logging/audit-event.js";
 import { getConfig } from "../config.js";
@@ -34,7 +33,7 @@ normalize.post("/api/normalize", async (c) => {
 
   try {
     const canonical = await processGpxFile(file, config.gpxPolicy);
-    gpxXml = serializeGpx(canonical, config.gpxPolicy);
+    gpxXml = prepareCanonicalGpx(canonical, config.gpxPolicy).xml;
   } catch (error) {
     // Preserve internal-failure status while keeping arbitrary exception text
     // out of Hono's application/audit error logs (it may contain GPX data).

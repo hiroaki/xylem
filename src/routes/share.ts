@@ -1,3 +1,4 @@
+import { readCanonicalJson, CanonicalJsonLimitError } from "../gpx/json.js";
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
@@ -446,8 +447,16 @@ function escapeHtmlText(value: string): string {
 }
 
 router.get("/s/:id", async (c) => {
-  const id = c.req.param("id");
+  try {
+    return await serveShare(c, c.req.param("id"));
+  } catch (error) {
+    if (error instanceof CanonicalJsonLimitError) return c.text("Bad Gateway", 502);
+    throw error;
+  }
+});
 
+// Keep the byte-limit mapping around both generation and in-flight waiters.
+async function serveShare(c: Context, id: string) {
   if (!isValidId(id)) {
     return c.text("Not Found", 404);
   }
@@ -485,7 +494,7 @@ router.get("/s/:id", async (c) => {
   } finally {
     inFlight.delete(id);
   }
-});
+}
 
 export default router;
 
@@ -507,7 +516,7 @@ async function generateShareHtml(
   }
 
   const canonicalDocument =
-    (await response.json()) as CanonicalGpxDocument;
+    (await readCanonicalJson(response)) as CanonicalGpxDocument;
 
   const metadata = getMetadata(canonicalDocument);
   const config = getConfig();

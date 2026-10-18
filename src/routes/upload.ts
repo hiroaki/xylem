@@ -3,8 +3,7 @@ import { getConfig } from "../config.js";
 import { createAnemochoreClient } from "../services/anemochore.js";
 import { createDeleteToken } from "../utils/delete-token.js";
 import { buildDeleteUrl } from "../utils/delete-url.js";
-import type { CanonicalGpxDocument } from "../gpx/canonicalize.js";
-import { processGpxFile } from "../gpx/process.js";
+import { prepareCanonicalGpx, processGpxFile } from "../gpx/process.js";
 import { GpxNormalizationError } from "../gpx/errors.js";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import {
@@ -44,10 +43,11 @@ upload.post("/api/upload", async (c) => {
 
   // Xylem is the sole GPX parse/validate/normalize boundary; Anemochore only
   // ever sees the canonical payload derived here, never the original bytes.
-  let canonicalDocument: CanonicalGpxDocument;
+  let canonicalJson: string;
 
   try {
-    canonicalDocument = await processGpxFile(file, config.gpxPolicy);
+    const canonical = await processGpxFile(file, config.gpxPolicy);
+    canonicalJson = prepareCanonicalGpx(canonical, config.gpxPolicy).json;
   } catch (error) {
     // Preserve internal-failure status while keeping arbitrary exception text
     // out of Hono's application/audit error logs (it may contain GPX data).
@@ -71,7 +71,7 @@ upload.post("/api/upload", async (c) => {
   let response: Response;
 
   try {
-    response = await client.upload(canonicalDocument);
+    response = await client.upload(canonicalJson);
   } catch (error) {
     const errorDetails = getSafeNetworkErrorDetails(error);
 

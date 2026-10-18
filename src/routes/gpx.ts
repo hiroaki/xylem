@@ -1,3 +1,4 @@
+import { readCanonicalJson, CanonicalJsonLimitError } from "../gpx/json.js";
 import { Hono } from "hono";
 import { getConfig } from "../config.js";
 import { createAnemochoreClient } from "../services/anemochore.js";
@@ -69,7 +70,12 @@ gpx.get("/api/gpx/:id", async (c) => {
 
   // Anemochore returns the canonical payload as JSON; re-serialize it to GPX XML
   // here so Tilia (which never changes) keeps receiving real GPX bytes.
-  const canonicalDocument = await response.json();
+  let canonicalDocument: unknown;
+  try { canonicalDocument = await readCanonicalJson(response); }
+  catch (error) {
+    if (error instanceof CanonicalJsonLimitError) return c.json({ error: "Bad Gateway" }, 502);
+    throw error;
+  }
   const gpxXml = serializeGpx(canonicalDocument, config.gpxPolicy);
 
   return c.body(

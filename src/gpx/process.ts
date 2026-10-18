@@ -1,3 +1,5 @@
+import { encodeCanonicalJson, CanonicalJsonLimitError } from "./json.js";
+import { serializeGpx } from "./serialize.js";
 import { GpxNormalizationError } from "./errors.js";
 import type { GpxPolicy } from "../policy.js";
 import { canonicalizeGpx } from "./canonicalize.js";
@@ -28,4 +30,18 @@ export function processGpxBytes(bytes: Uint8Array, policy: GpxPolicy) {
 
 export async function processGpxFile(file: File, policy: GpxPolicy) {
   return processGpxBytes(new Uint8Array(await file.arrayBuffer()), policy);
+}
+
+// Shared input preparation: invariant failures remain internal; only the
+// canonical byte budget is an expected input rejection.
+export function prepareCanonicalGpx(canonical: unknown, policy: GpxPolicy) {
+  assertValidCanonicalGpxDocument(canonical, policy);
+  let json: string;
+  try { json = encodeCanonicalJson(canonical); }
+  catch (error) {
+    if (error instanceof CanonicalJsonLimitError) throw new GpxNormalizationError("canonical JSON too large");
+    throw error;
+  }
+  const xml = serializeGpx(canonical, policy);
+  return { json, xml };
 }
