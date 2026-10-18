@@ -19,6 +19,8 @@ describe("canonicalizeGpx", () => {
       maxRawBytes: 2 * 1024 * 1024,
       maxTotalPoints: Number.MAX_SAFE_INTEGER,
       maxNameLength: 200,
+      maxRoutes: 20,
+      maxRoutePointsPerRoute: 100,
     });
 
     expect(result).toEqual({
@@ -69,6 +71,8 @@ describe("canonicalizeGpx", () => {
         maxRawBytes: 2 * 1024 * 1024,
         maxTotalPoints: Number.MAX_SAFE_INTEGER,
         maxNameLength: 200,
+        maxRoutes: 20,
+        maxRoutePointsPerRoute: 100,
       }),
     ).toThrow();
   });
@@ -88,24 +92,10 @@ describe("canonicalizeGpx", () => {
     expect(() => assertSafeGpxXml(fixture("entity.gpx"), 2 * 1024 * 1024)).toThrow();
   });
 
-  it("drops points with non-finite or out-of-range coordinates instead of failing the whole track", () => {
-    const gpx = `<?xml version="1.0"?>
-<gpx version="1.1"><trk><trkseg>
-  <trkpt lat="NaN" lon="135.5"><ele>999</ele></trkpt>
-  <trkpt lat="35.0" lon="200.0" />
-  <trkpt lat="35.1" lon="135.1" />
-</trkseg></trk></gpx>`;
-
-    const result = canonicalizeGpx(parseGpxXml(gpx), {
-      maxRawBytes: 2 * 1024 * 1024,
-      maxTotalPoints: Number.MAX_SAFE_INTEGER,
-      maxNameLength: 200,
-    });
-
-    expect(result.data.tracks).toHaveLength(1);
-    expect(result.data.tracks[0]?.segments[0]?.points).toEqual([
-      { coordinates: [135.1, 35.1] },
-    ]);
+  it("rejects the whole track when a coordinate is invalid", () => {
+    expect(() => canonicalizeGpx(parseGpxXml('<gpx><trk><trkseg><trkpt lat="NaN" lon="135"/><trkpt lat="35" lon="135"/></trkseg></trk></gpx>'), {
+      maxRawBytes: 2 * 1024 * 1024, maxTotalPoints: 50000, maxNameLength: 200, maxRoutes: 20, maxRoutePointsPerRoute: 100,
+    })).toThrow();
   });
 
   it("preserves multiple track segments as separate segments rather than concatenating them", () => {
@@ -119,15 +109,17 @@ describe("canonicalizeGpx", () => {
       maxRawBytes: 2 * 1024 * 1024,
       maxTotalPoints: Number.MAX_SAFE_INTEGER,
       maxNameLength: 200,
+      maxRoutes: 20,
+      maxRoutePointsPerRoute: 100,
     });
 
     expect(result.data.tracks[0]?.segments).toHaveLength(2);
   });
 
-  it("drops a segment with no valid points, and a track with no valid segments", () => {
+  it("removes empty segments and tracks without points", () => {
     const emptySegmentGpx = `<?xml version="1.0"?>
 <gpx version="1.1"><trk>
-  <trkseg><trkpt lat="NaN" lon="135.0" /></trkseg>
+  <trkseg/>
   <trkseg><trkpt lat="35.0" lon="135.0" /></trkseg>
 </trk></gpx>`;
 
@@ -135,12 +127,14 @@ describe("canonicalizeGpx", () => {
       maxRawBytes: 2 * 1024 * 1024,
       maxTotalPoints: Number.MAX_SAFE_INTEGER,
       maxNameLength: 200,
+      maxRoutes: 20,
+      maxRoutePointsPerRoute: 100,
     });
     expect(withEmptySegment.data.tracks[0]?.segments).toHaveLength(1);
 
     const onlyEmptySegmentsGpx = `<?xml version="1.0"?>
 <gpx version="1.1">
-  <trk><trkseg><trkpt lat="NaN" lon="135.0" /></trkseg></trk>
+  <trk><trkseg/></trk>
   <wpt lat="35.0" lon="135.0" />
 </gpx>`;
 
@@ -148,6 +142,8 @@ describe("canonicalizeGpx", () => {
       maxRawBytes: 2 * 1024 * 1024,
       maxTotalPoints: Number.MAX_SAFE_INTEGER,
       maxNameLength: 200,
+      maxRoutes: 20,
+      maxRoutePointsPerRoute: 100,
     });
     expect(withDroppedTrack.data.tracks).toHaveLength(0);
     expect(withDroppedTrack.data.waypoints).toHaveLength(1);
@@ -159,6 +155,8 @@ describe("canonicalizeGpx", () => {
       maxRawBytes: 2 * 1024 * 1024,
       maxTotalPoints: Number.MAX_SAFE_INTEGER,
       maxNameLength: 200,
+      maxRoutes: 20,
+      maxRoutePointsPerRoute: 100,
     }));
 
     for (const result of results.slice(1)) {
@@ -179,15 +177,17 @@ describe("canonicalizeGpx", () => {
         maxRawBytes: 2 * 1024 * 1024,
         maxTotalPoints: 2,
         maxNameLength: 200,
+        maxRoutes: 20,
+        maxRoutePointsPerRoute: 100,
       }),
     ).toThrow();
   });
 
-  it("counts invalid points toward the traversal budget before discarding them", () => {
+  it("counts an encountered invalid point before coordinate validation", () => {
     const document = parseGpxXml(`<?xml version="1.0"?>
 <gpx version="1.1"><trk><trkseg>
-  <trkpt lat="NaN" lon="135.0" />
-  <trkpt lat="NaN" lon="135.0" />
+  <trkpt lat="35" lon="135.0" />
+  <trkpt lat="35" lon="135.0" />
   <trkpt lat="NaN" lon="135.0" />
 </trkseg></trk></gpx>`);
 
@@ -196,8 +196,10 @@ describe("canonicalizeGpx", () => {
         maxRawBytes: 2 * 1024 * 1024,
         maxTotalPoints: 2,
         maxNameLength: 200,
+        maxRoutes: 20,
+        maxRoutePointsPerRoute: 100,
       }),
-    ).toThrow();
+    ).toThrow("file exceeds max total points");
   });
 
   it("is deterministic even if wall-clock time changes between calls", () => {
@@ -206,6 +208,8 @@ describe("canonicalizeGpx", () => {
       maxRawBytes: 2 * 1024 * 1024,
       maxTotalPoints: Number.MAX_SAFE_INTEGER,
       maxNameLength: 200,
+      maxRoutes: 20,
+      maxRoutePointsPerRoute: 100,
     });
 
     vi.useFakeTimers();
@@ -214,6 +218,8 @@ describe("canonicalizeGpx", () => {
       maxRawBytes: 2 * 1024 * 1024,
       maxTotalPoints: Number.MAX_SAFE_INTEGER,
       maxNameLength: 200,
+      maxRoutes: 20,
+      maxRoutePointsPerRoute: 100,
     });
     vi.useRealTimers();
 

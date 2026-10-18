@@ -1,6 +1,9 @@
 import type { GpxPolicy } from "./policy.js";
 import { MAX_NAME_LENGTH } from "./gpx/schema.js";
 
+// Local service defaults/ceilings match the inspected Birch import capacity.
+const MAX_ROUTES = 20;
+const MAX_ROUTE_POINTS_PER_ROUTE = 100;
 const DEFAULT_MAX_RAW_GPX_BYTES = 2 * 1024 * 1024;
 
 export type LogLevel =
@@ -85,6 +88,17 @@ function parsePositiveInteger(name: string, value: string | undefined, fallback:
   return parsed;
 }
 
+function routeLimit(name: string, ceiling: number): number {
+  const raw = process.env[name];
+  if (raw === undefined) return ceiling;
+  if (!/^[0-9]+$/.test(raw)) throw new Error(`Invalid ${name}: ${raw}`);
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value <= 0 || value > ceiling) {
+    throw new Error(`Invalid ${name}: ${raw}`);
+  }
+  return value;
+}
+
 function validateGpxPolicy(limits: GpxPolicy): void {
   if (limits.maxNameLength > MAX_NAME_LENGTH) {
     throw new Error(
@@ -95,6 +109,8 @@ function validateGpxPolicy(limits: GpxPolicy): void {
 
 export function getConfig(): Config {
   const gpxPolicy: GpxPolicy = {
+    maxRoutes: routeLimit("GPX_MAX_ROUTES", MAX_ROUTES),
+    maxRoutePointsPerRoute: routeLimit("GPX_MAX_ROUTE_POINTS_PER_ROUTE", MAX_ROUTE_POINTS_PER_ROUTE),
     maxRawBytes: parsePositiveInteger("XYLEM_GPX_MAX_RAW_BYTES", process.env.XYLEM_GPX_MAX_RAW_BYTES, DEFAULT_MAX_RAW_GPX_BYTES),
     maxTotalPoints: parsePositiveInteger("XYLEM_GPX_MAX_TOTAL_POINTS", process.env.XYLEM_GPX_MAX_TOTAL_POINTS, 50_000),
     maxNameLength: parsePositiveInteger("XYLEM_GPX_MAX_NAME_LENGTH", process.env.XYLEM_GPX_MAX_NAME_LENGTH, MAX_NAME_LENGTH),

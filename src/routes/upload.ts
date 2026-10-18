@@ -3,11 +3,9 @@ import { getConfig } from "../config.js";
 import { createAnemochoreClient } from "../services/anemochore.js";
 import { createDeleteToken } from "../utils/delete-token.js";
 import { buildDeleteUrl } from "../utils/delete-url.js";
-import { canonicalizeGpx, type CanonicalGpxDocument } from "../gpx/canonicalize.js";
-import { assertValidCanonicalGpxDocument } from "../gpx/schema.js";
+import type { CanonicalGpxDocument } from "../gpx/canonicalize.js";
+import { processGpxFile } from "../gpx/process.js";
 import { GpxNormalizationError } from "../gpx/errors.js";
-import { parseGpxXml } from "../gpx/parse.js";
-import { assertSafeGpxXml } from "../gpx/xml-security-filter.js";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import {
   emitAuditEvent,
@@ -49,16 +47,12 @@ upload.post("/api/upload", async (c) => {
   let canonicalDocument: CanonicalGpxDocument;
 
   try {
-    const rawText = await file.text();
-    assertSafeGpxXml(rawText, config.gpxPolicy.maxRawBytes);
-    const document = parseGpxXml(rawText);
-    canonicalDocument = canonicalizeGpx(document, config.gpxPolicy);
-    assertValidCanonicalGpxDocument(canonicalDocument);
+    canonicalDocument = await processGpxFile(file, config.gpxPolicy);
   } catch (error) {
-    const message =
-      error instanceof GpxNormalizationError
-        ? error.message
-        : "invalid GPX file";
+    // Preserve internal-failure status while keeping arbitrary exception text
+    // out of Hono's application/audit error logs (it may contain GPX data).
+    if (!(error instanceof GpxNormalizationError)) throw new Error("GPX processing failed");
+    const message = error.message;
 
     emitAuditEvent(c, {
       event: "upload_rejected",

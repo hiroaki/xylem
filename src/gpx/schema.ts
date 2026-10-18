@@ -5,6 +5,8 @@ export const MIN_LONGITUDE = -180;
 export const MAX_LONGITUDE = 180;
 export const MIN_LATITUDE = -90;
 export const MAX_LATITUDE = 90;
+export const MIN_ELEVATION = -99999;
+export const MAX_ELEVATION = 99999;
 export const MAX_NAME_LENGTH = 200;
 
 // Schema-level hard limits remain enforced here even if runtime config validation is
@@ -25,16 +27,16 @@ function assertCoordinates(value: unknown, path: string): asserts value is Canon
 
   const [lon, lat, elevation] = value;
 
-  if (typeof lon !== "number" || !Number.isFinite(lon) || lon < MIN_LONGITUDE || lon > MAX_LONGITUDE) {
-    fail(`${path}[0] must be a finite longitude within [${MIN_LONGITUDE}, ${MAX_LONGITUDE}]`);
+  if (typeof lon !== "number" || !Number.isFinite(lon) || lon < MIN_LONGITUDE || lon >= MAX_LONGITUDE) {
+    fail(`${path}[0] must be a finite longitude within [${MIN_LONGITUDE}, ${MAX_LONGITUDE})`);
   }
 
   if (typeof lat !== "number" || !Number.isFinite(lat) || lat < MIN_LATITUDE || lat > MAX_LATITUDE) {
     fail(`${path}[1] must be a finite latitude within [${MIN_LATITUDE}, ${MAX_LATITUDE}]`);
   }
 
-  if (value.length === 3 && (typeof elevation !== "number" || !Number.isFinite(elevation))) {
-    fail(`${path}[2] must be a finite elevation when present`);
+  if (value.length === 3 && (typeof elevation !== "number" || !Number.isFinite(elevation) || elevation < MIN_ELEVATION || elevation > MAX_ELEVATION)) {
+    fail(`${path}[2] must be a finite elevation within [${MIN_ELEVATION}, ${MAX_ELEVATION}] when present`);
   }
 }
 

@@ -42,6 +42,8 @@ describe("serializeGpx", () => {
       maxRawBytes: 2 * 1024 * 1024,
       maxTotalPoints: Number.MAX_SAFE_INTEGER,
       maxNameLength: 200,
+      maxRoutes: 20,
+      maxRoutePointsPerRoute: 100,
     });
     expect(reCanonicalized.data.tracks[0]?.segments[0]?.points).toHaveLength(2);
   });
@@ -69,6 +71,8 @@ describe("serializeGpx", () => {
       maxRawBytes: 2 * 1024 * 1024,
       maxTotalPoints: Number.MAX_SAFE_INTEGER,
       maxNameLength: 200,
+      maxRoutes: 20,
+      maxRoutePointsPerRoute: 100,
     });
     expect(reCanonicalized.data.waypoints[0]?.name).toBe(
       "Tom & Jerry <script>]]></wpt>",

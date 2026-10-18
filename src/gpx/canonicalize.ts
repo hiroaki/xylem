@@ -7,6 +7,8 @@ import type {
 import { GpxNormalizationError } from "./errors.js";
 import type { GpxPolicy } from "../policy.js";
 import {
+  MAX_ELEVATION,
+  MIN_ELEVATION,
   MAX_LATITUDE,
   MAX_LONGITUDE,
   MIN_LATITUDE,
@@ -74,29 +76,28 @@ function normalizeName(raw: string | undefined, policy: GpxPolicy): string | und
   return cleaned.length > 0 ? cleaned : undefined;
 }
 
-function toCoordinates(node: GpxPointNode | undefined): CanonicalCoordinates | null {
-  if (!node) {
-    return null;
+// XML whitespace only; JavaScript trim would also accept non-XML spaces.
+const trimXmlWhitespace = (value: string) => value.replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, "");
+const DECIMAL = /^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)$/;
+function coordinate(raw: string | undefined, minimum: number, maximum: number, exclusive = false): number {
+  if (typeof raw !== "string" || !DECIMAL.test(trimXmlWhitespace(raw))) {
+    throw new GpxNormalizationError("invalid GPX coordinates");
   }
-
-  const lon = Number(node.lon);
-  const lat = Number(node.lat);
-
-  if (!Number.isFinite(lon) || !Number.isFinite(lat)) {
-    return null;
+  const value = Number(trimXmlWhitespace(raw));
+  if (!Number.isFinite(value) || value < minimum || (exclusive ? value >= maximum : value > maximum)) {
+    throw new GpxNormalizationError("invalid GPX coordinates");
   }
-
-  if (lon < MIN_LONGITUDE || lon > MAX_LONGITUDE) {
-    return null;
-  }
-
-  if (lat < MIN_LATITUDE || lat > MAX_LATITUDE) {
-    return null;
-  }
-
-  const elevation = node.ele !== undefined ? Number(node.ele) : Number.NaN;
-
-  return Number.isFinite(elevation) ? [lon, lat, elevation] : [lon, lat];
+  return value;
+}
+function toCoordinates(node: GpxPointNode): CanonicalCoordinates {
+  const lon = coordinate(node.lon, MIN_LONGITUDE, MAX_LONGITUDE, true);
+  const lat = coordinate(node.lat, MIN_LATITUDE, MAX_LATITUDE);
+  const rawElevation = node.ele === undefined ? "" : trimXmlWhitespace(node.ele);
+  // Inspect original digits (including leading/trailing zeros) before conversion.
+  const elevationDigits = /^[+-]?(?:([0-9]{1,5})(?:\.([0-9]{0,3}))?|\.([0-9]{1,3}))$/;
+  const elevation = elevationDigits.test(rawElevation) ? Number(rawElevation) : Number.NaN;
+  return Number.isFinite(elevation) && elevation >= MIN_ELEVATION && elevation <= MAX_ELEVATION
+    ? [lon, lat, elevation] : [lon, lat];
 }
 
 function toTime(raw: string | undefined): string | undefined {
@@ -120,8 +121,6 @@ function canonicalizeTrack(node: GpxTrackNode, policy: GpxPolicy, totalPointBudg
       // validation, so invalid points still consume the budget and malformed input
       // cannot bypass resource limits by being discarded after parsing.
       // Consume the traversal budget before validation.
-      // Invalid points still count because the budget protects against
-      // expensive input traversal, not only canonical output size.
       totalPointBudget.count += 1;
 
       if (totalPointBudget.count > policy.maxTotalPoints) {
@@ -129,11 +128,6 @@ function canonicalizeTrack(node: GpxTrackNode, policy: GpxPolicy, totalPointBudg
       }
 
       const coordinates = toCoordinates(pointNode);
-      if (!coordinates) {
-        // Invalid coordinate points are intentionally dropped during normalization
-        // so a single malformed point does not invalidate the rest of a track.
-        continue;
-      }
 
       const time = toTime(pointNode.time);
       points.push(time ? { coordinates, time } : { coordinates });
@@ -154,6 +148,9 @@ function canonicalizeTrack(node: GpxTrackNode, policy: GpxPolicy, totalPointBudg
 
 function canonicalizeRoute(node: GpxRouteNode, policy: GpxPolicy, totalPointBudget: { count: number }): CanonicalRoute | null {
   const points: CanonicalRoutePoint[] = [];
+  if ((node.rtept?.length ?? 0) > policy.maxRoutePointsPerRoute) {
+    throw new GpxNormalizationError("file exceeds max route points");
+  }
 
   for (const pointNode of node.rtept ?? []) {
     totalPointBudget.count += 1;
@@ -163,9 +160,7 @@ function canonicalizeRoute(node: GpxRouteNode, policy: GpxPolicy, totalPointBudg
     }
 
     const coordinates = toCoordinates(pointNode);
-    if (coordinates) {
-      points.push({ coordinates });
-    }
+    points.push({ coordinates });
   }
 
   if (points.length === 0) {
@@ -176,7 +171,7 @@ function canonicalizeRoute(node: GpxRouteNode, policy: GpxPolicy, totalPointBudg
   return name ? { name, points } : { points };
 }
 
-function canonicalizeWaypoint(node: GpxPointNode, policy: GpxPolicy, totalPointBudget: { count: number }): CanonicalWaypoint | null {
+function canonicalizeWaypoint(node: GpxPointNode, policy: GpxPolicy, totalPointBudget: { count: number }): CanonicalWaypoint {
   totalPointBudget.count += 1;
 
   if (totalPointBudget.count > policy.maxTotalPoints) {
@@ -184,9 +179,6 @@ function canonicalizeWaypoint(node: GpxPointNode, policy: GpxPolicy, totalPointB
   }
 
   const coordinates = toCoordinates(node);
-  if (!coordinates) {
-    return null;
-  }
 
   const name = normalizeName(node.name, policy);
   return name ? { coordinates, name } : { coordinates };
@@ -201,6 +193,9 @@ export function canonicalizeGpx(
   policy: GpxPolicy,
 ): CanonicalGpxDocument {
   const totalPointBudget = { count: 0 };
+  if ((document.rte?.length ?? 0) > policy.maxRoutes) {
+    throw new GpxNormalizationError("file exceeds max routes");
+  }
 
   const tracks = (document.trk ?? [])
     .map((track) => canonicalizeTrack(track, policy, totalPointBudget))
@@ -211,8 +206,7 @@ export function canonicalizeGpx(
     .filter((route): route is CanonicalRoute => route !== null);
 
   const waypoints = (document.wpt ?? [])
-    .map((waypoint) => canonicalizeWaypoint(waypoint, policy, totalPointBudget))
-    .filter((waypoint): waypoint is CanonicalWaypoint => waypoint !== null);
+    .map((waypoint) => canonicalizeWaypoint(waypoint, policy, totalPointBudget));
 
   if (tracks.length === 0 && routes.length === 0 && waypoints.length === 0) {
     throw new GpxNormalizationError("invalid GPX file");
