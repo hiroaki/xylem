@@ -34,7 +34,7 @@ normalize.post("/api/normalize", async (c) => {
 
   try {
     const canonical = await processGpxFile(file, config.gpxPolicy);
-    gpxXml = serializeGpx(canonical);
+    gpxXml = serializeGpx(canonical, config.gpxPolicy);
   } catch (error) {
     // Preserve internal-failure status while keeping arbitrary exception text
     // out of Hono's application/audit error logs (it may contain GPX data).

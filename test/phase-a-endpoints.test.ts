@@ -66,7 +66,7 @@ async function accepted(xml: string) {
   expect(url).toBe("https://storage.example/api/upload");
   expect(init?.headers).toMatchObject({ Authorization: "Bearer test", "Content-Type": "application/json" });
   const captured = JSON.parse(String(init?.body));
-  expect(await preview.text()).toBe(serializeGpx(captured));
+  expect(await preview.text()).toBe(serializeGpx(captured, policy));
   const body = await upload.json();
   expect(body).toHaveProperty("deleteToken");
   expect(body).not.toHaveProperty("delete_key");

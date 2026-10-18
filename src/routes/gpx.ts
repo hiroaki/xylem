@@ -70,7 +70,7 @@ gpx.get("/api/gpx/:id", async (c) => {
   // Anemochore returns the canonical payload as JSON; re-serialize it to GPX XML
   // here so Tilia (which never changes) keeps receiving real GPX bytes.
   const canonicalDocument = await response.json();
-  const gpxXml = serializeGpx(canonicalDocument);
+  const gpxXml = serializeGpx(canonicalDocument, config.gpxPolicy);
 
   return c.body(
     gpxXml,

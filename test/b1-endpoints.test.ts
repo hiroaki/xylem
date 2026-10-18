@@ -1,3 +1,4 @@
+import { policy } from "./helpers/phase-a.js";
 import type { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { serializeGpx } from "../src/gpx/serialize.js";
@@ -38,7 +39,7 @@ async function accepted(xml: string) {
   expect(upload.status).toBe(200);
   expect(fetch).toHaveBeenCalledTimes(1);
   const canonical = JSON.parse(String(vi.mocked(fetch).mock.calls[0]?.[1]?.body));
-  expect(await preview.text()).toBe(serializeGpx(canonical));
+  expect(await preview.text()).toBe(serializeGpx(canonical, policy));
   return canonical;
 }
 
