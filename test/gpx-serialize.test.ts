@@ -41,7 +41,6 @@ describe("serializeGpx", () => {
     const reCanonicalized = canonicalizeGpx(parseGpxXml(xml), {
       maxRawBytes: 2 * 1024 * 1024,
       maxTotalPoints: Number.MAX_SAFE_INTEGER,
-      maxNameLength: 200,
       maxRoutes: 20,
       maxRoutePointsPerRoute: 100,
     });
@@ -70,7 +69,6 @@ describe("serializeGpx", () => {
     const reCanonicalized = canonicalizeGpx(parseGpxXml(xml), {
       maxRawBytes: 2 * 1024 * 1024,
       maxTotalPoints: Number.MAX_SAFE_INTEGER,
-      maxNameLength: 200,
       maxRoutes: 20,
       maxRoutePointsPerRoute: 100,
     });

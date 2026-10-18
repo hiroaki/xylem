@@ -13,68 +13,16 @@ import {
   MAX_LONGITUDE,
   MIN_LATITUDE,
   MIN_LONGITUDE,
-} from "./schema.js";
+} from "./contract.js";
 
-export type CanonicalCoordinates =
-  | [number, number]
-  | [number, number, number];
-
-export type CanonicalPoint = {
-  coordinates: CanonicalCoordinates;
-  time?: string;
-};
-
-export type CanonicalSegment = {
-  points: CanonicalPoint[];
-};
-
-export type CanonicalTrack = {
-  name?: string;
-  segments: CanonicalSegment[];
-};
-
-export type CanonicalRoutePoint = {
-  coordinates: CanonicalCoordinates;
-};
-
-export type CanonicalRoute = {
-  name?: string;
-  points: CanonicalRoutePoint[];
-};
-
-export type CanonicalWaypoint = {
-  coordinates: CanonicalCoordinates;
-  name?: string;
-};
-
-export type CanonicalGpxData = {
-  tracks: CanonicalTrack[];
-  routes: CanonicalRoute[];
-  waypoints: CanonicalWaypoint[];
-};
-
-export type CanonicalGpxDocument = {
-  schema_version: 1;
-  data_type: "gpx";
-  data: CanonicalGpxData;
-};
-
-const CONTROL_CHARACTERS_PATTERN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
-
-function normalizeName(raw: string | undefined, policy: GpxPolicy): string | undefined {
-  if (raw === undefined) {
-    return undefined;
-  }
-
-  // Names are intentionally truncated during normalization to enforce the
-  // canonical representation length policy.
-  const cleaned = raw
-    .replace(CONTROL_CHARACTERS_PATTERN, "")
-    .trim()
-    .slice(0, policy.maxNameLength);
-
-  return cleaned.length > 0 ? cleaned : undefined;
-}
+import type {
+  CanonicalCoordinates, CanonicalPoint, CanonicalSegment, CanonicalTrack,
+  CanonicalRoutePoint, CanonicalRoute, CanonicalWaypoint, CanonicalGpxDocument,
+} from "./contract.js";
+// Retain type-only imports for existing consumers; definitions live in contract.ts.
+export type * from "./contract.js";
+import { normalizeGpxText } from "./text.js";
+import { normalizeGpxTime } from "./time.js";
 
 // XML whitespace only; JavaScript trim would also accept non-XML spaces.
 const trimXmlWhitespace = (value: string) => value.replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, "");
@@ -100,15 +48,6 @@ function toCoordinates(node: GpxPointNode): CanonicalCoordinates {
     ? [lon, lat, elevation] : [lon, lat];
 }
 
-function toTime(raw: string | undefined): string | undefined {
-  if (!raw) {
-    return undefined;
-  }
-
-  const trimmed = raw.trim();
-  return Number.isFinite(Date.parse(trimmed)) ? trimmed : undefined;
-}
-
 function canonicalizeTrack(node: GpxTrackNode, policy: GpxPolicy, totalPointBudget: { count: number }): CanonicalTrack | null {
   const segments: CanonicalSegment[] = [];
 
@@ -129,7 +68,7 @@ function canonicalizeTrack(node: GpxTrackNode, policy: GpxPolicy, totalPointBudg
 
       const coordinates = toCoordinates(pointNode);
 
-      const time = toTime(pointNode.time);
+      const time = normalizeGpxTime(pointNode.time);
       points.push(time ? { coordinates, time } : { coordinates });
     }
 
@@ -142,7 +81,7 @@ function canonicalizeTrack(node: GpxTrackNode, policy: GpxPolicy, totalPointBudg
     return null;
   }
 
-  const name = normalizeName(node.name, policy);
+  const name = normalizeGpxText(node.name, "name");
   return name ? { name, segments } : { segments };
 }
 
@@ -167,7 +106,7 @@ function canonicalizeRoute(node: GpxRouteNode, policy: GpxPolicy, totalPointBudg
     return null;
   }
 
-  const name = normalizeName(node.name, policy);
+  const name = normalizeGpxText(node.name, "name");
   return name ? { name, points } : { points };
 }
 
@@ -180,7 +119,7 @@ function canonicalizeWaypoint(node: GpxPointNode, policy: GpxPolicy, totalPointB
 
   const coordinates = toCoordinates(node);
 
-  const name = normalizeName(node.name, policy);
+  const name = normalizeGpxText(node.name, "name");
   return name ? { coordinates, name } : { coordinates };
 }
 

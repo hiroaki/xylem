@@ -7,7 +7,7 @@ import { assertValidCanonicalGpxDocument } from "./schema.js";
 // Both original-file endpoints share this authoritative input boundary.
 export function processGpxInput(rawText: string, policy: GpxPolicy) {
   const canonical = canonicalizeGpx(parseGpxXml(rawText, policy.maxRawBytes), policy);
-  assertValidCanonicalGpxDocument(canonical);
+  assertValidCanonicalGpxDocument(canonical, policy);
   return canonical;
 }
 

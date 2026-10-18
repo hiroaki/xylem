@@ -9,7 +9,7 @@ function normalize(xml: string, overrides = {}) {
   const limits = { ...policy, ...overrides };
   assertSafeGpxXml(xml, limits.maxRawBytes);
   const result = canonicalizeGpx(parseGpxXml(xml), limits);
-  assertValidCanonicalGpxDocument(result);
+  assertValidCanonicalGpxDocument(result, limits);
   return result;
 }
 function coordinates(xml: string) {
@@ -106,7 +106,7 @@ describe("D16 document-wide XML safety", () => {
 describe("Phase A canonical numeric consistency", () => {
   it.each([[180, 0], [-180.001, 0], [0, 91], [0, 0, 99999.001], [0, 0, -99999.001], [0, 0, Infinity]])("rejects canonical coordinates %j", (...value) => {
     // Table rows are coordinate tuples, not original XML lexical spellings.
-    expect(() => assertValidCanonicalGpxDocument({ schema_version: 1, data_type: "gpx", data: { tracks: [], routes: [], waypoints: [{ coordinates: value }] } })).toThrow();
+    expect(() => assertValidCanonicalGpxDocument({ schema_version: 1, data_type: "gpx", data: { tracks: [], routes: [], waypoints: [{ coordinates: value }] } }, policy)).toThrow();
   });
 });
 

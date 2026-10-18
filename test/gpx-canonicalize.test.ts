@@ -5,6 +5,50 @@ import { describe, expect, it, vi } from "vitest";
 import { canonicalizeGpx } from "../src/gpx/canonicalize.js";
 import { parseGpxXml } from "../src/gpx/parse.js";
 import { assertSafeGpxXml } from "../src/gpx/xml-security-filter.js";
+import { processGpxInput } from "../src/gpx/process.js";
+import { policy } from "./helpers/phase-a.js";
+import { validTimes, invalidTimes } from "./helpers/phase-b.js";
+
+describe("B1 currently supported name/time ingestion", () => {
+  const entities = [
+    ["track", (text: string) => `<trk><name>${text}</name><trkseg><trkpt lat="0" lon="0"/></trkseg></trk>`, (d: any) => d.data.tracks[0]],
+    ["route", (text: string) => `<rte><name>${text}</name><rtept lat="0" lon="0"/></rte>`, (d: any) => d.data.routes[0]],
+    ["waypoint", (text: string) => `<wpt lat="0" lon="0"><name>${text}</name></wpt>`, (d: any) => d.data.waypoints[0]],
+  ] as const;
+  for (const [kind, xml, select] of entities) {
+    it.each([255, 256, 257])(`${kind} normalizes %i code points without splitting pairs`, count => {
+      const name = "😀".repeat(count);
+      const d = processGpxInput(`<gpx>${xml("  " + name + "  ")}</gpx>`, policy);
+      expect(select(d).name).toBe(count > 256 ? "😀".repeat(255) + "…" : name);
+    });
+    it(`${kind} preserves legal DEL/internal whitespace and omits first blank/structured singleton`, () => {
+      const normalize = (text: string) => select(processGpxInput(`<gpx>${xml(text)}</gpx>`, policy));
+      expect(normalize(" A\u007f\tB\nC ").name).toBe("A\u007f\tB\nC");
+      expect(normalize(" ").name).toBeUndefined();
+      expect(normalize("<child>value</child>").name).toBeUndefined();
+      const duplicate = xml(" ").replace("</name>", "</name><name>fallback</name>");
+      expect(select(processGpxInput(`<gpx>${duplicate}</gpx>`, policy)).name).toBeUndefined();
+    });
+    it(`${kind} never replaces the first overlong/structured/valid name with a later duplicate`, () => {
+      for (const [raw, expected] of [["a".repeat(257), "a".repeat(255) + "…"], ["<child/>", undefined], ["first", "first"]]) {
+        const duplicate = xml(raw!).replace("</name>", "</name><name>fallback</name>");
+        expect(select(processGpxInput(`<gpx>${duplicate}</gpx>`, policy)).name).toBe(expected);
+      }
+    });
+  }
+  it.each(validTimes.map((value, index) => ({value, index})))("preserves track time $index exactly", ({value}) => {
+    const d = processGpxInput(`<gpx><trk><trkseg><trkpt lat="0" lon="0"><time> ${value} </time></trkpt></trkseg></trk></gpx>`, policy);
+    expect(d.data.tracks[0].segments[0].points[0].time).toBe(value);
+  });
+  it.each(invalidTimes.filter(value => value.trim() === value).map((value, index) => ({value, index})))("omits invalid first track time $index without fallback", ({value}) => {
+    const d = processGpxInput(`<gpx><trk><trkseg><trkpt lat="0" lon="0"><time>${value}</time><time>2026-01-01T00:00:00Z</time></trkpt></trkseg></trk></gpx>`, policy);
+    expect(d.data.tracks[0].segments[0].points[0]).not.toHaveProperty("time");
+  });
+  it("does not enable B5 metadata or empty-route retention", () => {
+    const d = processGpxInput('<gpx><rte><name>empty</name></rte><rte><desc>not yet</desc><rtept lat="0" lon="0"><name>not yet</name><desc>not yet</desc><sym>Flag</sym><time>2026-01-01T00:00:00Z</time></rtept></rte></gpx>', policy);
+    expect(d.data.routes).toEqual([{points: [{coordinates: [0, 0]}]}]);
+  });
+});
 
 function fixture(name: string): string {
   return readFileSync(
@@ -18,7 +62,6 @@ describe("canonicalizeGpx", () => {
     const result = canonicalizeGpx(parseGpxXml(fixture("sample.gpx")), {
       maxRawBytes: 2 * 1024 * 1024,
       maxTotalPoints: Number.MAX_SAFE_INTEGER,
-      maxNameLength: 200,
       maxRoutes: 20,
       maxRoutePointsPerRoute: 100,
     });
@@ -70,7 +113,6 @@ describe("canonicalizeGpx", () => {
       canonicalizeGpx(parseGpxXml(fixture("empty.gpx")), {
         maxRawBytes: 2 * 1024 * 1024,
         maxTotalPoints: Number.MAX_SAFE_INTEGER,
-        maxNameLength: 200,
         maxRoutes: 20,
         maxRoutePointsPerRoute: 100,
       }),
@@ -94,7 +136,7 @@ describe("canonicalizeGpx", () => {
 
   it("rejects the whole track when a coordinate is invalid", () => {
     expect(() => canonicalizeGpx(parseGpxXml('<gpx><trk><trkseg><trkpt lat="NaN" lon="135"/><trkpt lat="35" lon="135"/></trkseg></trk></gpx>'), {
-      maxRawBytes: 2 * 1024 * 1024, maxTotalPoints: 50000, maxNameLength: 200, maxRoutes: 20, maxRoutePointsPerRoute: 100,
+      maxRawBytes: 2 * 1024 * 1024, maxTotalPoints: 50000, maxRoutes: 20, maxRoutePointsPerRoute: 100,
     })).toThrow();
   });
 
@@ -108,7 +150,6 @@ describe("canonicalizeGpx", () => {
     const result = canonicalizeGpx(parseGpxXml(gpx), {
       maxRawBytes: 2 * 1024 * 1024,
       maxTotalPoints: Number.MAX_SAFE_INTEGER,
-      maxNameLength: 200,
       maxRoutes: 20,
       maxRoutePointsPerRoute: 100,
     });
@@ -126,7 +167,6 @@ describe("canonicalizeGpx", () => {
     const withEmptySegment = canonicalizeGpx(parseGpxXml(emptySegmentGpx), {
       maxRawBytes: 2 * 1024 * 1024,
       maxTotalPoints: Number.MAX_SAFE_INTEGER,
-      maxNameLength: 200,
       maxRoutes: 20,
       maxRoutePointsPerRoute: 100,
     });
@@ -141,7 +181,6 @@ describe("canonicalizeGpx", () => {
     const withDroppedTrack = canonicalizeGpx(parseGpxXml(onlyEmptySegmentsGpx), {
       maxRawBytes: 2 * 1024 * 1024,
       maxTotalPoints: Number.MAX_SAFE_INTEGER,
-      maxNameLength: 200,
       maxRoutes: 20,
       maxRoutePointsPerRoute: 100,
     });
@@ -154,7 +193,6 @@ describe("canonicalizeGpx", () => {
     const results = Array.from({ length: 5 }, () => canonicalizeGpx(parseGpxXml(input), {
       maxRawBytes: 2 * 1024 * 1024,
       maxTotalPoints: Number.MAX_SAFE_INTEGER,
-      maxNameLength: 200,
       maxRoutes: 20,
       maxRoutePointsPerRoute: 100,
     }));
@@ -176,7 +214,6 @@ describe("canonicalizeGpx", () => {
       canonicalizeGpx(document, {
         maxRawBytes: 2 * 1024 * 1024,
         maxTotalPoints: 2,
-        maxNameLength: 200,
         maxRoutes: 20,
         maxRoutePointsPerRoute: 100,
       }),
@@ -195,7 +232,6 @@ describe("canonicalizeGpx", () => {
       canonicalizeGpx(document, {
         maxRawBytes: 2 * 1024 * 1024,
         maxTotalPoints: 2,
-        maxNameLength: 200,
         maxRoutes: 20,
         maxRoutePointsPerRoute: 100,
       }),
@@ -207,7 +243,6 @@ describe("canonicalizeGpx", () => {
     const first = canonicalizeGpx(parseGpxXml(input), {
       maxRawBytes: 2 * 1024 * 1024,
       maxTotalPoints: Number.MAX_SAFE_INTEGER,
-      maxNameLength: 200,
       maxRoutes: 20,
       maxRoutePointsPerRoute: 100,
     });
@@ -217,7 +252,6 @@ describe("canonicalizeGpx", () => {
     const second = canonicalizeGpx(parseGpxXml(input), {
       maxRawBytes: 2 * 1024 * 1024,
       maxTotalPoints: Number.MAX_SAFE_INTEGER,
-      maxNameLength: 200,
       maxRoutes: 20,
       maxRoutePointsPerRoute: 100,
     });

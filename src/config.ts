@@ -1,5 +1,4 @@
 import type { GpxPolicy } from "./policy.js";
-import { MAX_NAME_LENGTH } from "./gpx/schema.js";
 
 // Local service defaults/ceilings match the inspected Birch import capacity.
 const MAX_ROUTES = 20;
@@ -99,24 +98,13 @@ function routeLimit(name: string, ceiling: number): number {
   return value;
 }
 
-function validateGpxPolicy(limits: GpxPolicy): void {
-  if (limits.maxNameLength > MAX_NAME_LENGTH) {
-    throw new Error(
-      `GpxPolicy.maxNameLength (${limits.maxNameLength}) exceeds schema hard limit (${MAX_NAME_LENGTH})`,
-    );
-  }
-}
-
 export function getConfig(): Config {
   const gpxPolicy: GpxPolicy = {
     maxRoutes: routeLimit("GPX_MAX_ROUTES", MAX_ROUTES),
     maxRoutePointsPerRoute: routeLimit("GPX_MAX_ROUTE_POINTS_PER_ROUTE", MAX_ROUTE_POINTS_PER_ROUTE),
     maxRawBytes: parsePositiveInteger("XYLEM_GPX_MAX_RAW_BYTES", process.env.XYLEM_GPX_MAX_RAW_BYTES, DEFAULT_MAX_RAW_GPX_BYTES),
     maxTotalPoints: parsePositiveInteger("XYLEM_GPX_MAX_TOTAL_POINTS", process.env.XYLEM_GPX_MAX_TOTAL_POINTS, 50_000),
-    maxNameLength: parsePositiveInteger("XYLEM_GPX_MAX_NAME_LENGTH", process.env.XYLEM_GPX_MAX_NAME_LENGTH, MAX_NAME_LENGTH),
   };
-
-  validateGpxPolicy(gpxPolicy);
 
   return {
     anemochoreApiUrl: requiredUrlEnv("ANEMOCHORE_API_URL"),

@@ -3,7 +3,6 @@ import type { GpxPolicy } from "../../src/policy.js";
 export const policy = {
   maxRawBytes: 2 * 1024 * 1024,
   maxTotalPoints: 50_000,
-  maxNameLength: 200,
   maxRoutes: 20,
   maxRoutePointsPerRoute: 100,
 } satisfies GpxPolicy;

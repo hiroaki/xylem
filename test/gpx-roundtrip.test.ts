@@ -41,14 +41,12 @@ describe("canonicalize/serialize idempotency", () => {
       const canonical = canonicalizeGpx(parsed, {
         maxRawBytes: 2 * 1024 * 1024,
         maxTotalPoints: Number.MAX_SAFE_INTEGER,
-        maxNameLength: 200,
         maxRoutes: 20,
         maxRoutePointsPerRoute: 100,
       });
       const roundTripped = canonicalizeGpx(parseGpxXml(serializeGpx(canonical)), {
         maxRawBytes: 2 * 1024 * 1024,
         maxTotalPoints: Number.MAX_SAFE_INTEGER,
-        maxNameLength: 200,
         maxRoutes: 20,
         maxRoutePointsPerRoute: 100,
       });

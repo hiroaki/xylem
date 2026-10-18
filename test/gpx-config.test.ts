@@ -17,6 +17,11 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe("D14 startup configuration (L04)", () => {
+  it.each(["", "1", "200", "999999", "not-a-number"])("ignores retired name-length environment setting %s", raw => {
+    vi.stubEnv("XYLEM_GPX_MAX_NAME_LENGTH", raw);
+    expect(getConfig().gpxPolicy).toEqual({maxRawBytes: 2097152, maxTotalPoints: 50000, maxRoutes: 20, maxRoutePointsPerRoute: 100});
+    expect(getConfig().gpxPolicy).not.toHaveProperty("maxNameLength");
+  });
   it("uses local defaults when unset", () => {
     expect(getConfig().gpxPolicy).toMatchObject({ maxRoutes: 20, maxRoutePointsPerRoute: 100 });
   });

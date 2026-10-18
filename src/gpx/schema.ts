@@ -1,165 +1,95 @@
-import { GpxNormalizationError } from "./errors.js";
-import type { CanonicalCoordinates, CanonicalGpxDocument } from "./canonicalize.js";
+import type { GpxPolicy } from "../policy.js";
+import {
+  type CanonicalGpxDocument, type GpxTextField,
+  MIN_LONGITUDE, MAX_LONGITUDE, MIN_LATITUDE, MAX_LATITUDE, MIN_ELEVATION, MAX_ELEVATION,
+} from "./contract.js";
+import { CanonicalValidationError } from "./errors.js";
+import { isValidCanonicalText } from "./text.js";
+import { isValidGpxTime } from "./time.js";
 
-export const MIN_LONGITUDE = -180;
-export const MAX_LONGITUDE = 180;
-export const MIN_LATITUDE = -90;
-export const MAX_LATITUDE = 90;
-export const MIN_ELEVATION = -99999;
-export const MAX_ELEVATION = 99999;
-export const MAX_NAME_LENGTH = 200;
-
-// Schema-level hard limits remain enforced here even if runtime config validation is
-// bypassed, so canonical documents cannot exceed the GPX domain constraints.
-
-function fail(reason: string): never {
-  throw new GpxNormalizationError(`invalid canonical GPX document: ${reason}`);
+function fail(reason: CanonicalValidationError["reason"] = "structure"): never {
+  throw new CanonicalValidationError(reason);
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+// Accept JSON records only, with own data properties. Reject unknown branches
+// and accessors before any consumer can evaluate their contents.
+function object(value: unknown, required: readonly string[], optional: readonly string[] = []): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) fail();
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) fail();
+  for (const key of Reflect.ownKeys(value)) {
+    if (typeof key !== "string" || (!required.includes(key) && !optional.includes(key))) fail();
+    const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
+    if (!("value" in descriptor) || !descriptor.enumerable) fail();
+  }
+  for (const key of required) if (!Object.hasOwn(value, key)) fail();
+  return value as Record<string, unknown>;
 }
 
-function assertCoordinates(value: unknown, path: string): asserts value is CanonicalCoordinates {
-  if (!Array.isArray(value) || (value.length !== 2 && value.length !== 3)) {
-    fail(`${path} must be a [lon, lat] or [lon, lat, ele] array`);
-  }
-
-  const [lon, lat, elevation] = value;
-
-  if (typeof lon !== "number" || !Number.isFinite(lon) || lon < MIN_LONGITUDE || lon >= MAX_LONGITUDE) {
-    fail(`${path}[0] must be a finite longitude within [${MIN_LONGITUDE}, ${MAX_LONGITUDE})`);
-  }
-
-  if (typeof lat !== "number" || !Number.isFinite(lat) || lat < MIN_LATITUDE || lat > MAX_LATITUDE) {
-    fail(`${path}[1] must be a finite latitude within [${MIN_LATITUDE}, ${MAX_LATITUDE}]`);
-  }
-
-  if (value.length === 3 && (typeof elevation !== "number" || !Number.isFinite(elevation) || elevation < MIN_ELEVATION || elevation > MAX_ELEVATION)) {
-    fail(`${path}[2] must be a finite elevation within [${MIN_ELEVATION}, ${MAX_ELEVATION}] when present`);
-  }
+function array(value: unknown, nonempty = false): unknown[] {
+  if (!Array.isArray(value) || (nonempty && value.length === 0)) fail();
+  return value;
 }
 
-function assertOptionalName(value: unknown, path: string): asserts value is string | undefined {
-  if (value === undefined) {
-    return;
-  }
-
-  if (typeof value !== "string" || value.length === 0 || value.length > MAX_NAME_LENGTH) {
-    fail(`${path} must be a non-empty string of at most ${MAX_NAME_LENGTH} characters`);
-  }
+function coordinates(value: unknown): void {
+  if (!Array.isArray(value) || (value.length !== 2 && value.length !== 3)) fail("coordinates");
+  const [lon, lat, ele] = value;
+  if (typeof lon !== "number" || !Number.isFinite(lon) || lon < MIN_LONGITUDE || lon >= MAX_LONGITUDE
+    || typeof lat !== "number" || !Number.isFinite(lat) || lat < MIN_LATITUDE || lat > MAX_LATITUDE) fail("coordinates");
+  if (value.length === 3 && (typeof ele !== "number" || !Number.isFinite(ele) || ele < MIN_ELEVATION || ele > MAX_ELEVATION)) fail("coordinates");
 }
 
-function assertOptionalTime(value: unknown, path: string): void {
-  if (value === undefined) {
-    return;
-  }
-
-  if (typeof value !== "string" || !Number.isFinite(Date.parse(value))) {
-    fail(`${path} must be an ISO 8601 timestamp string when present`);
-  }
+function text(value: Record<string, unknown>, field: GpxTextField): void {
+  if (Object.hasOwn(value, field) && !isValidCanonicalText(value[field], field)) fail("text");
 }
 
-// Canonical payload validation only.
-// This validates representation safety and structural consistency;
-// it does not attempt full GPX semantic validation.
-export function assertValidCanonicalGpxDocument(
-  value: unknown,
-): asserts value is CanonicalGpxDocument {
-  if (!isPlainObject(value)) {
-    fail("document must be an object");
+function time(value: Record<string, unknown>): void {
+  if (Object.hasOwn(value, "time") && !isValidGpxTime(value.time)) fail("time");
+}
+
+// Strict acceptance of canonical data: no GPX ingestion repair or mutation.
+export function assertValidCanonicalGpxDocument(value: unknown, policy: GpxPolicy): asserts value is CanonicalGpxDocument {
+  const envelope = object(value, ["schema_version", "data_type", "data"]);
+  if (envelope.schema_version !== 1 || envelope.data_type !== "gpx") fail();
+  const data = object(envelope.data, ["tracks", "routes", "waypoints"]);
+  const tracks = array(data.tracks), routes = array(data.routes), waypoints = array(data.waypoints);
+  if (routes.length > policy.maxRoutes) fail("resource");
+  let totalPoints = 0;
+  function count(points: unknown[]): void {
+    totalPoints += points.length;
+    if (totalPoints > policy.maxTotalPoints) fail("resource");
   }
-
-  if (value.schema_version !== 1) {
-    fail("schema_version must be 1");
-  }
-
-  if (value.data_type !== "gpx") {
-    fail('data_type must be "gpx"');
-  }
-
-  if (!isPlainObject(value.data)) {
-    fail("data must be an object");
-  }
-
-  const { tracks, routes, waypoints } = value.data;
-
-  if (!Array.isArray(tracks)) {
-    fail("data.tracks must be an array");
-  }
-
-  tracks.forEach((track, trackIndex) => {
-    if (!isPlainObject(track)) {
-      fail(`data.tracks[${trackIndex}] must be an object`);
-    }
-
-    assertOptionalName(track.name, `data.tracks[${trackIndex}].name`);
-
-    if (!Array.isArray(track.segments) || track.segments.length === 0) {
-      fail(`data.tracks[${trackIndex}].segments must be a non-empty array`);
-    }
-
-    track.segments.forEach((segment: unknown, segmentIndex: number) => {
-      if (!isPlainObject(segment)) {
-        fail(`data.tracks[${trackIndex}].segments[${segmentIndex}] must be an object`);
+  for (const value of tracks) {
+    const track = object(value, ["segments"], ["name"]);
+    text(track, "name");
+    for (const value of array(track.segments, true)) {
+      const segment = object(value, ["points"]);
+      const points = array(segment.points, true);
+      count(points);
+      for (const value of points) {
+        const point = object(value, ["coordinates"], ["time"]);
+        coordinates(point.coordinates);
+        time(point);
       }
-
-      if (!Array.isArray(segment.points) || segment.points.length === 0) {
-        fail(`data.tracks[${trackIndex}].segments[${segmentIndex}].points must be a non-empty array`);
-      }
-
-      segment.points.forEach((point: unknown, pointIndex: number) => {
-        const path = `data.tracks[${trackIndex}].segments[${segmentIndex}].points[${pointIndex}]`;
-        if (!isPlainObject(point)) {
-          fail(`${path} must be an object`);
-        }
-
-        assertCoordinates(point.coordinates, `${path}.coordinates`);
-        assertOptionalTime(point.time, `${path}.time`);
-      });
-    });
-  });
-
-  if (!Array.isArray(routes)) {
-    fail("data.routes must be an array");
-  }
-
-  routes.forEach((route, routeIndex) => {
-    if (!isPlainObject(route)) {
-      fail(`data.routes[${routeIndex}] must be an object`);
     }
-
-    assertOptionalName(route.name, `data.routes[${routeIndex}].name`);
-
-    if (!Array.isArray(route.points) || route.points.length === 0) {
-      fail(`data.routes[${routeIndex}].points must be a non-empty array`);
-    }
-
-    route.points.forEach((point: unknown, pointIndex: number) => {
-      const path = `data.routes[${routeIndex}].points[${pointIndex}]`;
-      if (!isPlainObject(point)) {
-        fail(`${path} must be an object`);
-      }
-
-      assertCoordinates(point.coordinates, `${path}.coordinates`);
-    });
-  });
-
-  if (!Array.isArray(waypoints)) {
-    fail("data.waypoints must be an array");
   }
-
-  waypoints.forEach((waypoint, waypointIndex) => {
-    const path = `data.waypoints[${waypointIndex}]`;
-    if (!isPlainObject(waypoint)) {
-      fail(`${path} must be an object`);
+  for (const value of routes) {
+    const route = object(value, ["points"], ["name", "desc"]);
+    text(route, "name"); text(route, "desc");
+    const points = array(route.points);
+    if (points.length > policy.maxRoutePointsPerRoute) fail("resource");
+    count(points);
+    for (const value of points) {
+      const point = object(value, ["coordinates"], ["name", "desc", "sym", "time"]);
+      coordinates(point.coordinates);
+      text(point, "name"); text(point, "desc"); text(point, "sym"); time(point);
     }
-
-    assertCoordinates(waypoint.coordinates, `${path}.coordinates`);
-    assertOptionalName(waypoint.name, `${path}.name`);
-  });
-
-  if (tracks.length === 0 && routes.length === 0 && waypoints.length === 0) {
-    fail("data must contain at least one track, route, or waypoint");
   }
+  count(waypoints);
+  for (const value of waypoints) {
+    const point = object(value, ["coordinates"], ["name"]);
+    coordinates(point.coordinates);
+    text(point, "name");
+  }
+  if (totalPoints === 0) fail("geometry");
 }
