@@ -60,11 +60,11 @@ describe("B1 actual normalize/upload input boundary", () => {
     const d = await accepted(`<gpx><trk><trkseg><trkpt lat="0" lon="0"><time>${value}</time><time>2026-01-01T00:00:00Z</time></trkpt></trkseg></trk></gpx>`);
     expect(d.data.tracks[0].segments[0].points[0]).not.toHaveProperty("time");
   });
-  it("preserves legal text and first-singleton/structured omission without enabling B5", async () => {
+  it("preserves legal text and first-singleton/structured omission alongside B5 metadata", async () => {
     const d = await accepted('<gpx><trk><name> </name><name>fallback</name><trkseg><trkpt lat="0" lon="0"><name>not retained</name><time><nested/></time><time>2026-01-01T00:00:00Z</time></trkpt></trkseg></trk><rte><name> A\u007f\tB\nC &amp; &lt;D&gt; </name><desc>future</desc><rtept lat="0" lon="0"><name>future</name><sym>Flag</sym></rtept></rte><rte/><wpt lat="0" lon="0"><name><nested/></name><name>fallback</name></wpt></gpx>');
     expect(d.data.tracks[0]).not.toHaveProperty("name");
     expect(d.data.tracks[0].segments[0].points[0]).toEqual({coordinates: [0, 0]});
-    expect(d.data.routes).toEqual([{name: "A\u007f\tB\nC & <D>", points: [{coordinates: [0, 0]}]}]);
+    expect(d.data.routes).toEqual([{name: "A\u007f\tB\nC & <D>", desc: "future", points: [{coordinates: [0, 0], name: "future", sym: "Flag"}]}, {points: []}]);
     expect(d.data.waypoints[0]).not.toHaveProperty("name");
   });
   it.each(["\u0000", "\ud800", "&#xB;", "&#xD800;"])("rejects invalid XML text %# safely with zero storage calls", async invalid => {

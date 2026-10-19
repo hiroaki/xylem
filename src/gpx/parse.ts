@@ -10,10 +10,10 @@ const XMLNS_NAMESPACE = "http://www.w3.org/2000/xmlns/";
 const geographic = new Set(["gpx", "trk", "trkseg", "trkpt", "rte", "rtept", "wpt"]);
 const parents: Record<string, string> = { trk: "gpx", rte: "gpx", wpt: "gpx", trkseg: "trk", trkpt: "trkseg", rtept: "rte" };
 
-export type GpxPointNode = { lat?: string; lon?: string; ele?: string; time?: string; name?: string };
+export type GpxPointNode = { lat?: string; lon?: string; ele?: string; time?: string; name?: string; desc?: string; sym?: string };
 export type GpxTrackSegmentNode = { trkpt?: GpxPointNode[] };
 export type GpxTrackNode = { name?: string; trkseg?: GpxTrackSegmentNode[] };
-export type GpxRouteNode = { name?: string; rtept?: GpxPointNode[] };
+export type GpxRouteNode = { name?: string; desc?: string; rtept?: GpxPointNode[] };
 export type GpxDocumentNode = { trk?: GpxTrackNode[]; rte?: GpxRouteNode[]; wpt?: GpxPointNode[] };
 
 type Geography = GpxDocumentNode & GpxTrackNode & GpxTrackSegmentNode & GpxRouteNode & GpxPointNode;
@@ -111,7 +111,9 @@ export function parseGpxXml(rawText: string, maxRawBytes = Number.POSITIVE_INFIN
       const collection = (target[local] ??= []) as Geography[];
       collection.push(value);
       current.value = value;
-    } else if (uri === rootNamespace && parent.value && ["name", "ele", "time"].includes(local) && !parent.seen.has(local)) {
+    } else if (uri === rootNamespace && parent.value && (["name", "ele", "time"].includes(local)
+      || (local === "desc" && ["rte", "rtept"].includes(parent.kind))
+      || (local === "sym" && parent.kind === "rtept")) && !parent.seen.has(local)) {
       parent.seen.add(local);
       const text = simpleText(children);
       if (text !== undefined) (parent.value as Record<string,string>)[local] = text;

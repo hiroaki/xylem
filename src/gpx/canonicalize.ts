@@ -85,7 +85,7 @@ function canonicalizeTrack(node: GpxTrackNode, policy: GpxPolicy, totalPointBudg
   return name ? { name, segments } : { segments };
 }
 
-function canonicalizeRoute(node: GpxRouteNode, policy: GpxPolicy, totalPointBudget: { count: number }): CanonicalRoute | null {
+function canonicalizeRoute(node: GpxRouteNode, policy: GpxPolicy, totalPointBudget: { count: number }): CanonicalRoute {
   const points: CanonicalRoutePoint[] = [];
   if ((node.rtept?.length ?? 0) > policy.maxRoutePointsPerRoute) {
     throw new GpxNormalizationError("file exceeds max route points");
@@ -99,15 +99,22 @@ function canonicalizeRoute(node: GpxRouteNode, policy: GpxPolicy, totalPointBudg
     }
 
     const coordinates = toCoordinates(pointNode);
-    points.push({ coordinates });
+    const point: CanonicalRoutePoint = { coordinates };
+    const time = normalizeGpxTime(pointNode.time);
+    if (time !== undefined) point.time = time;
+    for (const field of ["name", "desc", "sym"] as const) {
+      const text = normalizeGpxText(pointNode[field], field);
+      if (text !== undefined) point[field] = text;
+    }
+    points.push(point);
   }
 
-  if (points.length === 0) {
-    return null;
+  const route: CanonicalRoute = { points };
+  for (const field of ["name", "desc"] as const) {
+    const text = normalizeGpxText(node[field], field);
+    if (text !== undefined) route[field] = text;
   }
-
-  const name = normalizeGpxText(node.name, "name");
-  return name ? { name, points } : { points };
+  return route;
 }
 
 function canonicalizeWaypoint(node: GpxPointNode, policy: GpxPolicy, totalPointBudget: { count: number }): CanonicalWaypoint {
@@ -141,13 +148,13 @@ export function canonicalizeGpx(
     .filter((track): track is CanonicalTrack => track !== null);
 
   const routes = (document.rte ?? [])
-    .map((route) => canonicalizeRoute(route, policy, totalPointBudget))
-    .filter((route): route is CanonicalRoute => route !== null);
+    .map((route) => canonicalizeRoute(route, policy, totalPointBudget));
 
   const waypoints = (document.wpt ?? [])
     .map((waypoint) => canonicalizeWaypoint(waypoint, policy, totalPointBudget));
 
-  if (tracks.length === 0 && routes.length === 0 && waypoints.length === 0) {
+  // Empty routes are retained containers, not geographic points.
+  if (totalPointBudget.count === 0) {
     throw new GpxNormalizationError("invalid GPX file");
   }
 

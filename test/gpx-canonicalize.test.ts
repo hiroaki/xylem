@@ -44,9 +44,9 @@ describe("B1 currently supported name/time ingestion", () => {
     const d = processGpxInput(`<gpx><trk><trkseg><trkpt lat="0" lon="0"><time>${value}</time><time>2026-01-01T00:00:00Z</time></trkpt></trkseg></trk></gpx>`, policy);
     expect(d.data.tracks[0].segments[0].points[0]).not.toHaveProperty("time");
   });
-  it("does not enable B5 metadata or empty-route retention", () => {
-    const d = processGpxInput('<gpx><rte><name>empty</name></rte><rte><desc>not yet</desc><rtept lat="0" lon="0"><name>not yet</name><desc>not yet</desc><sym>Flag</sym><time>2026-01-01T00:00:00Z</time></rtept></rte></gpx>', policy);
-    expect(d.data.routes).toEqual([{points: [{coordinates: [0, 0]}]}]);
+  it("retains B5 metadata and empty routes alongside actual geometry", () => {
+    const d = processGpxInput('<gpx><rte><name>empty</name></rte><rte><desc>description</desc><rtept lat="0" lon="0"><name>point</name><desc>description</desc><sym>Flag</sym><time>2026-01-01T00:00:00Z</time></rtept></rte></gpx>', policy);
+    expect(d.data.routes).toEqual([{name: "empty", points: []}, {desc: "description", points: [{coordinates: [0, 0], name: "point", desc: "description", sym: "Flag", time: "2026-01-01T00:00:00Z"}]}]);
   });
 });
 
