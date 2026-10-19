@@ -91,10 +91,10 @@ describe.each(["/api/gpx/", "/s/"])("B3 bounded retrieval %s", path => {
     const result = await app.request(`http://localhost${path}${id}`); expect(result.status).toBe(502);
     expect(await readdir(cache)).toEqual([]);
   });
-  it("handles malformed in-limit JSON safely, preserving pre-B4 500 mapping", async () => {
+  it("handles malformed in-limit JSON safely, with B4 502 mapping", async () => {
     vi.mocked(fetch).mockResolvedValue(new Response('{"PRIVATE_JSON":'));
     const result = await app.request(`http://localhost${path}${id}`);
-    expect(result.status).toBe(500); expect(await result.text()).not.toContain("PRIVATE_JSON");
+    expect(result.status).toBe(502); expect(await result.text()).not.toContain("PRIVATE_JSON");
     expect(JSON.stringify(output)).not.toContain("PRIVATE_JSON"); expect(await readdir(cache)).toEqual([]);
   });
 });

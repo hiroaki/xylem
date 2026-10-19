@@ -57,7 +57,9 @@ describe("canonical JSON byte boundaries", () => {
   it("rejects post-parse numeric growth despite an in-limit wire body", async () => {
     const wire = JSON.stringify(canonicalBytes(cap + 1)).replace("0.000001", "1e-6");
     expect(Buffer.byteLength(wire)).toBeLessThan(cap);
-    await expect(readCanonicalJson(new Response(wire))).rejects.toBeInstanceOf(CanonicalJsonLimitError);
+    const content = await readCanonicalJson(new Response(wire));
+    assertValidCanonicalGpxDocument(content, policy);
+    expect(() => encodeCanonicalJson(content)).toThrow(CanonicalJsonLimitError);
   });
   it.each([false, true])("rejects overflow before JSON.parse, cancels and unlocks; cancellation rejects=%s", async (fail) => {
     const cancel = vi.fn(() => {if (fail) return Promise.reject(new Error("PRIVATE_CANCEL"));});
@@ -88,4 +90,26 @@ describe("canonical JSON byte boundaries", () => {
     await expect(readCanonicalJson(new Response(Uint8Array.of(0xff)))).rejects.toThrow(/^invalid canonical JSON response$/);
     expect(body.locked).toBe(false);
   });
+});
+
+it("removes abort listeners and unlocks the reader when an in-flight read is aborted", async () => {
+  const controller = new AbortController();
+  const add = vi.spyOn(controller.signal, "addEventListener");
+  const remove = vi.spyOn(controller.signal, "removeEventListener");
+  const cancel = vi.fn(() => new Promise<void>(() => {}));
+  const body = new ReadableStream<Uint8Array>({cancel});
+  const pending = readCanonicalJson(new Response(body), {signal: controller.signal});
+  controller.abort(new Error("PRIVATE_ABORT_REASON"));
+  await expect(pending).rejects.toThrow(/^invalid canonical JSON response$/);
+  expect(body.locked).toBe(false); expect(cancel).toHaveBeenCalledOnce();
+  expect(add).toHaveBeenCalledOnce(); expect(remove).toHaveBeenCalledWith("abort", add.mock.calls[0][1]);
+  vi.restoreAllMocks();
+});
+it("marks body completion before parsing and removes the normal-path abort listener", async () => {
+  const controller = new AbortController(); const remove = vi.spyOn(controller.signal, "removeEventListener");
+  const stages: string[] = [];
+  const parse = JSON.parse; vi.spyOn(JSON, "parse").mockImplementation(s => {stages.push("parse");return parse(s);});
+  await readCanonicalJson(new Response("{}"), {signal: controller.signal, onBodyComplete: () => {stages.push("eof");}});
+  expect(stages).toEqual(["eof", "parse"]); expect(remove).toHaveBeenCalledOnce();
+  vi.restoreAllMocks();
 });

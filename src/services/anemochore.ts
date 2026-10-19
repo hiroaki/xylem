@@ -34,9 +34,11 @@ class AnemochoreClient {
     return response;
   }
 
-  async getGpx(id: string): Promise<Response> {
-    const response = await fetch(`${this.apiUrl}/api/gpx/${id}`, {
+  async getGpx(id: string, signal?: AbortSignal): Promise<Response> {
+    const response = await fetch(`${this.apiUrl}/api/gpx/${encodeURIComponent(id)}`, {
       headers: this.headers(),
+      signal,
+      redirect: "manual",
     });
 
     return response;

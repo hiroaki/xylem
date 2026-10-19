@@ -361,7 +361,7 @@ describe("audit logging", () => {
       },
     );
 
-    expect(upstreamFailureResponse.status).toBe(503);
+    expect(upstreamFailureResponse.status).toBe(502);
 
     const exceptionResponse = await app.request(
       "http://localhost/api/gpx/gpx-201",
@@ -370,7 +370,7 @@ describe("audit logging", () => {
       },
     );
 
-    expect(exceptionResponse.status).toBe(500);
+    expect(exceptionResponse.status).toBe(502);
 
     const anemochoreFailure = entries.find((entry) =>
       entry.obj.event === "anemochore_gpx_fetched" &&
@@ -384,19 +384,22 @@ describe("audit logging", () => {
     );
     const responseSentFromUpstreamFailure = entries.find((entry) =>
       entry.obj.event === "response_sent" &&
-      entry.obj.status === 503 &&
+      entry.obj.status === 502 &&
+      entry.obj.path === "/api/gpx/gpx-200" &&
       entry.level === "error"
     );
     const responseSentFromException = entries.find((entry) =>
       entry.obj.event === "response_sent" &&
-      entry.obj.status === 500 &&
+      entry.obj.status === 502 &&
+      entry.obj.path === "/api/gpx/gpx-201" &&
       entry.level === "error"
     );
 
     expect(anemochoreFailure?.obj.status).toBe(503);
     expect(anemochoreFailure?.obj.failure_reason).toBe("anemochore_rejected");
     expect(anemochoreFailure?.level).toBe("error");
-    expect(anemochoreUnreachable?.obj.error_message).toContain("upstream connection failed");
+    expect(anemochoreUnreachable?.obj.error_message).toBeUndefined();
+    expect(JSON.stringify(entries)).not.toContain("upstream connection failed");
     expect(anemochoreUnreachable?.level).toBe("error");
     expect(responseSentFromUpstreamFailure?.obj.result).toBe("failure");
     expect(responseSentFromException?.obj.result).toBe("failure");

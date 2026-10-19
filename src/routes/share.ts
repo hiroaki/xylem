@@ -1,65 +1,19 @@
-import { readCanonicalJson, CanonicalJsonLimitError } from "../gpx/json.js";
+import { assertPublicId, retrieveCanonicalGpx } from "../services/canonical-gpx.js";
+import { retrievalErrorResponse } from "./retrieval-error.js";
+import { emitAuditEvent } from "../logging/audit-event.js";
+import type { CanonicalCoordinates, CanonicalTrack, CanonicalRoute, CanonicalWaypoint, CanonicalGpxDocument } from "../gpx/contract.js";
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { getConfig } from "../config.js";
-import { createAnemochoreClient } from "../services/anemochore.js";
 
 const router = new Hono();
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const CACHE_DIR = process.env.SHARE_CACHE_DIR ?? "/tmp/gpx-share";
 
-const inFlight = new Map<string, Promise<string | null>>();
-
-function isValidId(id: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    id,
-  );
-}
-
-type CanonicalCoordinates =
-  | [number, number]
-  | [number, number, number];
-
-type CanonicalPoint = {
-  coordinates: CanonicalCoordinates;
-  time?: string;
-};
-
-type CanonicalSegment = {
-  points: CanonicalPoint[];
-};
-
-type CanonicalTrack = {
-  name?: string;
-  segments: CanonicalSegment[];
-};
-
-type CanonicalRoutePoint = {
-  coordinates: CanonicalCoordinates;
-};
-
-type CanonicalRoute = {
-  name?: string;
-  points: CanonicalRoutePoint[];
-};
-
-type CanonicalWaypoint = {
-  coordinates: CanonicalCoordinates;
-  name?: string;
-};
-
-type CanonicalGpxDocument = {
-  schema_version: 1;
-  data_type: "gpx";
-  data: {
-    tracks: CanonicalTrack[];
-    routes: CanonicalRoute[];
-    waypoints: CanonicalWaypoint[];
-  };
-};
+const inFlight = new Map<string, Promise<string>>();
 
 type Metadata = {
   title: string;
@@ -447,19 +401,17 @@ function escapeHtmlText(value: string): string {
 }
 
 router.get("/s/:id", async (c) => {
+  emitAuditEvent(c, {event: "gpx_retrieval_requested", result: "success"});
   try {
     return await serveShare(c, c.req.param("id"));
   } catch (error) {
-    if (error instanceof CanonicalJsonLimitError) return c.text("Bad Gateway", 502);
-    throw error;
+    return retrievalErrorResponse(c, error);
   }
 });
 
-// Keep the byte-limit mapping around both generation and in-flight waiters.
+// The route classifies failures from both generation and in-flight waiters.
 async function serveShare(c: Context, id: string) {
-  if (!isValidId(id)) {
-    return c.text("Not Found", 404);
-  }
+  assertPublicId(id, "share");
 
   const cachedHtml = await readCache(id);
 
@@ -472,9 +424,7 @@ async function serveShare(c: Context, id: string) {
   if (existing) {
     const html = await existing;
 
-    return html === null
-      ? c.text("Not Found", 404)
-      : c.html(html);
+    return c.html(html);
   }
 
   const generation = generateShareHtml(c, id);
@@ -483,10 +433,6 @@ async function serveShare(c: Context, id: string) {
 
   try {
     const html = await generation;
-
-    if (html === null) {
-      return c.text("Not Found", 404);
-    }
 
     await writeCache(id, html);
 
@@ -501,25 +447,10 @@ export default router;
 async function generateShareHtml(
   c: Context,
   id: string,
-): Promise<string | null> {
-  const client = createAnemochoreClient(c);
-  const response = await client.getGpx(id);
-
-  if (response.status === 404) {
-    return null;
-  }
-
-  if (response.status !== 200) {
-    throw new Error(
-      `Anemochore GPX retrieval failed: ${response.status}`,
-    );
-  }
-
-  const canonicalDocument =
-    (await readCanonicalJson(response)) as CanonicalGpxDocument;
-
-  const metadata = getMetadata(canonicalDocument);
+): Promise<string> {
   const config = getConfig();
+  const canonicalDocument = await retrieveCanonicalGpx(c, id, config.gpxPolicy, "share");
+  const metadata = getMetadata(canonicalDocument);
 
   const shareUrl =
     `${config.xylemPublicOrigin}/s/${encodeURIComponent(id)}`;
@@ -527,31 +458,17 @@ async function generateShareHtml(
   const ogImageUrl =
     `${config.chloroplastPublicOrigin}/og/${encodeURIComponent(id)}`;
 
-  return viewerTemplate()
-    .replaceAll(
-      "{{TITLE}}",
-      escapeHtmlText(`${metadata.title} - GPX Share (beta)`),
-    )
-    .replaceAll(
-      "{{OG_TITLE}}",
-      escapeHtmlAttribute(`${metadata.title} - GPX Share (beta)`),
-    )
-    .replaceAll(
-      "{{OG_DESCRIPTION}}",
-      escapeHtmlAttribute(metadata.description),
-    )
-    .replaceAll(
-      "{{OG_URL}}",
-      escapeHtmlAttribute(shareUrl),
-    )
-    .replaceAll(
-      "{{OG_IMAGE}}",
-      escapeHtmlAttribute(ogImageUrl),
-    )
-    .replaceAll(
-      "{{ID}}",
-      escapeHtmlAttribute(id),
-    );
+  const values: Record<string, string> = {
+    TITLE: escapeHtmlText(`${metadata.title} - GPX Share (beta)`),
+    OG_TITLE: escapeHtmlAttribute(`${metadata.title} - GPX Share (beta)`),
+    OG_DESCRIPTION: escapeHtmlAttribute(metadata.description),
+    OG_URL: escapeHtmlAttribute(shareUrl),
+    OG_IMAGE: escapeHtmlAttribute(ogImageUrl),
+    // UUID validation restricts this value in the inline JavaScript string too.
+    ID: id,
+  };
+  return viewerTemplate().replace(/\{\{(TITLE|OG_TITLE|OG_DESCRIPTION|OG_URL|OG_IMAGE|ID)\}\}/g,
+    (_match, key: string) => values[key]);
 }
 
 function viewerTemplate(): string {

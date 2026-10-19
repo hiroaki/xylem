@@ -49,6 +49,15 @@ function requiredUrlEnv(name: string): string {
   return value;
 }
 
+function publicUrlEnv(name: string): string {
+  const value = requiredUrlEnv(name);
+  const protocol = new URL(value).protocol;
+  if (protocol !== "http:" && protocol !== "https:") {
+    throw new Error(`Environment variable must be an HTTP(S) URL: ${name}`);
+  }
+  return value;
+}
+
 function parseBoolean(value: string): boolean {
   if (value === "1" || value === "true") {
     return true;
@@ -109,13 +118,13 @@ export function getConfig(): Config {
   return {
     anemochoreApiUrl: requiredUrlEnv("ANEMOCHORE_API_URL"),
     anemochoreApiKey: requiredEnv("ANEMOCHORE_API_KEY"),
-    xylemPublicOrigin: requiredUrlEnv("XYLEM_PUBLIC_ORIGIN"),
+    xylemPublicOrigin: publicUrlEnv("XYLEM_PUBLIC_ORIGIN"),
     xylemDeleteSecret: requiredEnv("XYLEM_DELETE_SECRET"),
     xylemStaticDir: process.env.XYLEM_STATIC_DIR ?? "./public",
     xylemTrustProxy: parseBoolean(process.env.XYLEM_TRUST_PROXY ?? "false"),
     xylemTrustedClientIpHeader: process.env.XYLEM_TRUSTED_CLIENT_IP_HEADER ?? "X-Forwarded-For",
     logLevel: parseLogLevel(process.env.LOG_LEVEL ?? "info"),
     gpxPolicy,
-    chloroplastPublicOrigin: requiredUrlEnv("CHLOROPLAST_PUBLIC_ORIGIN"),
+    chloroplastPublicOrigin: publicUrlEnv("CHLOROPLAST_PUBLIC_ORIGIN"),
   };
 }

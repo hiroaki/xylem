@@ -61,16 +61,16 @@ describe("B2 actual serializer callers", () => {
     {limits: {GPX_MAX_ROUTE_POINTS_PER_ROUTE: "1"}, mutate: (d: any) => d.data.routes[0].points.push({...d.data.routes[0].points[0]})},
     {limits: {XYLEM_GPX_MAX_TOTAL_POINTS: "2"}, mutate: (_d: any) => {}},
   ];
-  it.each(budgets)("propagates configured retrieval policy case %# (B4 mapping remains pending)", async ({limits, mutate}) => {
+  it.each(budgets)("propagates configured retrieval policy case %# (B4 retrieval mapping)", async ({limits, mutate}) => {
     await setup(limits);
     const d = canonicalFixture(); mutate(d);
     vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify(d)));
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const result = await app.request("http://localhost/api/gpx/test-id");
-    // B2 rejects at the serializer; the generic 502 classification belongs to B4.
-    expect(result.status).toBe(500);
-    expect(await result.json()).toEqual({error: "Internal Server Error"});
-    expect(String(error.mock.calls[0]?.[1])).toContain("CanonicalValidationError");
+    // B4 rejects external canonical violations before the serializer.
+    expect(result.status).toBe(502);
+    expect(await result.json()).toEqual({error: "Bad Gateway"});
+    expect(error).not.toHaveBeenCalled();
   });
   it("keeps an injected normalize invariant failure internal and private", async () => {
     await setup();
