@@ -511,6 +511,11 @@ function viewerTemplate(): string {
         box-shadow: inset 0 0 0 4px #0f766e66;
       }
 
+      #viewer-error {
+        position: fixed; top: 0; left: 0; right: 0; z-index: 2000;
+        margin: 0; padding: 12px; color: #7f1d1d; background: #fee2e2;
+      }
+
       #map {
         height: 100%;
         width: 100%;
@@ -526,45 +531,84 @@ function viewerTemplate(): string {
     </script>
   </head>
   <body>
+    <p id="viewer-error" role="alert" hidden></p>
     <div id="app-root" class="app">
       <div id="map"></div>
     </div>
 
     <script type="module">
-      import { createDefaultTiliaApp } from "/tilia/src/index.js";
+      const errorElement = document.querySelector("#viewer-error");
+      const hostLifetime = new AbortController();
+      let app, renderingSubscription, active = true, destruction;
+
+      function report(error) {
+        if (!active) return;
+        errorElement.textContent = error.message || "Could not initialize or render the map.";
+        errorElement.hidden = false;
+      }
+
+      function destroyViewer() {
+        if (!destruction) {
+          active = false;
+          hostLifetime.abort();
+          renderingSubscription?.unsubscribe();
+          destruction = app?.destroy() ?? Promise.resolve();
+        }
+        return destruction;
+      }
+      window.addEventListener("pagehide", (event) => {
+        if (!event.persisted) void destroyViewer().catch(console.error);
+      }, { signal: hostLifetime.signal });
 
       async function loadGpx(id) {
-        const response = await fetch("/api/gpx/" + encodeURIComponent(id));
+        const response = await fetch("/api/gpx/" + encodeURIComponent(id), {
+          signal: hostLifetime.signal,
+        });
         if (!response.ok) {
           throw new Error("GPX request failed: " + response.status);
         }
 
         const blob = await response.blob();
+        hostLifetime.signal.throwIfAborted();
         return new File([blob], id + ".gpx", {
           type: blob.type || "application/gpx+xml",
         });
       }
 
-      const app = createDefaultTiliaApp("map", {
-        baseMapOptions: { zoom: 1, center: [0.0, 139.7413575] },
-        plugins: [
-          "tilia-panel",
-          "tilia-status",
-          "tilia-base-maps-control",
-          "tilia-layers",
-          "tilia-elevation",
-          "tilia-query-import",
-          "x-gsi-base-maps",
-          "x-opentopomap-base-maps",
-          "x-milestone",
-          "x-gpx-export"
-        ],
-      });
       try {
-        const file = await loadGpx("{{ID}}");
-        await app.load(file);
+        // Catch module-loading failures as well as factory/startup failures.
+        const { createDefaultTiliaApp } = await import("/tilia/src/index.js");
+        if (active) {
+          app = createDefaultTiliaApp("map", {
+            baseMapOptions: { zoom: 1, center: [0.0, 139.7413575] },
+            plugins: [
+              "tilia-gpx-input", "tilia-gpx-renderer", "tilia-gpx-ui",
+              "tilia-map-selection-presenter",
+              "tilia-status", "tilia-base-maps-control", "tilia-layers",
+              "tilia-elevation", "tilia-query-import",
+              "x-gsi-base-maps", "x-opentopomap-base-maps",
+              "x-milestone", "x-gpx-export",
+            ],
+          });
+          await app.ready;
+          if (active) {
+            // Ready covers plugin setup. Input completion is semantic loading;
+            // rendering is independent. Include initial and later states.
+            renderingSubscription = app.rendering.subscribe((value) => {
+              for (const status of Array.isArray(value) ? value : [value]) {
+                if (status.state === "failed" || status.state === "unavailable") {
+                  report(new Error("GPX rendering failed."));
+                }
+              }
+            });
+            const file = await loadGpx("{{ID}}");
+            if (active) await app.load(file);
+            // The GPX input plugin fits once. Do not clear independent query
+            // entries, impose an import order, or equate load with rendering.
+          }
+        }
       } catch (error) {
-        app.setStatus(error.message);
+        report(error);
       }
     </script>
   </body>
