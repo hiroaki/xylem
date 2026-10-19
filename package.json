@@ -7,7 +7,9 @@
     "start": "node dist/index.js",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.js",
-    "test:c2": "playwright test --config playwright.c2.config.js"
+    "test:c2": "playwright test --config playwright.c2.config.js",
+    "test:staging": "playwright test --config playwright.staging.config.js",
+    "test:staging-safety": "playwright test --config playwright.safety.config.js"
   },
   "dependencies": {
     "@hono/node-server": "^2.0.11",
