@@ -2,6 +2,8 @@ import { richMixed } from "../browser/fixtures.js";
 import { serializeGpx } from "../../src/gpx/serialize.js";
 import { gpx, policy } from "../helpers/phase-a.js";
 import type { CanonicalGpxDocument } from "../../src/gpx/contract.js";
+import { readFileSync } from "node:fs";
+import { expectedCanonical } from "../helpers/phase-b5.js";
 
 type AcceptanceCase = { name: string; xml: string; expected: CanonicalGpxDocument };
 const rich = richMixed();
@@ -24,5 +26,10 @@ export const cases: AcceptanceCase[] = [
     expected: { schema_version: 1, data_type: "gpx", data: {
       tracks: [], waypoints: [], routes: Array.from({ length: 20 }, (_, r) => ({ name: `Route ${r}`, points: Array.from({ length: 100 }, (_, p) => ({ coordinates: [139 + p / 1000, 35 + r / 1000] as [number, number] })) })),
     } },
+  },
+  {
+    name: "wide-area B5",
+    xml: readFileSync(new URL("../fixtures/b5-wide-area.gpx", import.meta.url), "utf8"),
+    expected: expectedCanonical,
   },
 ];

@@ -2,6 +2,8 @@
 import { test, expect } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { appendFile } from "node:fs/promises";
+import { parse as parseHtml } from "parse5";
+import { createScanner, SyntaxKind } from "typescript/unstable/ast";
 import { policy } from "../helpers/phase-a.js";
 import { processGpxInput } from "../../src/gpx/process.js";
 import { downloadAndCompare } from "../browser/gpx-export.js";
@@ -13,7 +15,61 @@ import { cases } from "./cases.js";
 const policyTarget = stagingPolicy();
 const { target } = policyTarget;
 
+// Parse HTML and JavaScript without executing either. Fail closed on an
+// unrecognized initialization shape, spreads, or nonliteral plugin options.
+function assertMilestoneDisabledHtml(html: string) {
+  const scripts: string[] = [];
+  const visitHtml = (node: any) => {
+    if (node.tagName === "script" && node.attrs.some((a: any) => a.name === "type" && a.value === "module")) {
+      expect(node.attrs.some((a: any) => a.name === "src"), "Viewer initialization must be inspectable inline").toBe(false);
+      scripts.push(node.childNodes.map((n: any) => n.value ?? "").join(""));
+    }
+    for (const child of node.childNodes ?? []) visitHtml(child);
+  };
+  visitHtml(parseHtml(html));
+  expect(scripts, "Expected one deployed viewer module").toHaveLength(1);
+  const scanner = createScanner(true, undefined, scripts[0]);
+  const tokens: { kind: SyntaxKind; text: string; value: string }[] = [];
+  for (let kind = scanner.scan(); kind !== SyntaxKind.EndOfFile; kind = scanner.scan()) {
+    if (scanner.isUnterminated()) throw new Error("Unterminated viewer JavaScript token");
+    tokens.push({ kind, text: scanner.getTokenText(), value: scanner.getTokenValue() });
+  }
+  const calls = tokens.flatMap((token, i) => token.kind === SyntaxKind.Identifier
+    && token.value === "createDefaultTiliaApp" && tokens[i + 1]?.text === "(" ? [i] : []);
+  expect(calls, "Expected one explicit viewer factory call").toHaveLength(1);
+  let i = calls[0] + 2;
+  if (tokens[i]?.kind !== SyntaxKind.StringLiteral || tokens[i].value !== "map"
+    || tokens[++i]?.text !== "," || tokens[++i]?.text !== "{") throw new Error("Unrecognized viewer factory arguments");
+  // Accept only literal JSON-like options, with identifier keys and trailing
+  // commas. Tokenization excludes comments and decodes escaped plugin IDs.
+  // Never eval deployed code; expressions, spreads and computed keys fail.
+  const json: string[] = [], stack: string[] = [];
+  let pluginLists = 0;
+  do {
+    const token = tokens[i], next = tokens[i + 1];
+    if (!token) throw new Error("Incomplete viewer options");
+    if (next?.text === ":" && token.value === "plugins") pluginLists++;
+    if (token.kind === SyntaxKind.StringLiteral || (token.kind === SyntaxKind.Identifier && next?.text === ":")) {
+      json.push(JSON.stringify(token.value));
+    } else if (token.kind === SyntaxKind.NumericLiteral || ["true", "false", "null", "-"].includes(token.text)) {
+      json.push(token.text);
+    } else if (["{", "[", "}", "]", ":", ","].includes(token.text)) {
+      if (["{", "["].includes(token.text)) stack.push(token.text);
+      if (["}", "]"].includes(token.text) && stack.pop() !== (token.text === "}" ? "{" : "[")) throw new Error("Unbalanced viewer options");
+      if (!(token.text === "," && ["}", "]"].includes(next?.text))) json.push(token.text);
+    } else throw new Error("Nonliteral viewer options");
+    i++;
+  } while (stack.length);
+  if (tokens[i]?.text !== ")" || pluginLists !== 1) throw new Error("Unrecognized viewer plugin configuration");
+  const options = JSON.parse(json.join(""));
+  const ids: unknown = options.plugins;
+  if (!Array.isArray(ids) || !ids.every(id => typeof id === "string")) throw new Error("Nonliteral viewer plugin list");
+  expect(ids).toEqual(expect.arrayContaining(["tilia-gpx-input", "tilia-gpx-renderer", "tilia-query-import"]));
+  expect(ids, "Deployed viewer must disable x-milestone before GPX loading").not.toContain("x-milestone");
+}
+
 for (const fixture of cases) test(fixture.name, async ({ page, context, request }, info) => {
+  const wideArea = fixture.name === "wide-area B5";
   const errors: string[] = [], failedAssets: string[] = [];
   const created = new Map<string, string>(); // deletion capabilities remain memory-only
   // A horizontal SVG path has zero layout height despite its painted stroke.
@@ -43,6 +99,72 @@ for (const fixture of cases) test(fixture.name, async ({ page, context, request 
   // Await installation before the first application navigation. The guard
   // sends real HTTP requests without redirects and never hands a 3xx to Chromium.
   const guard = await installStagingRequestGuard(context, policyTarget);
+  const milestoneRequests: string[] = [];
+  let viewerApproved = Promise.resolve();
+  // Registered last: denied plugin requests never reach the network. All other
+  // requests still pass through the unchanged staging guard via fallback().
+  if (wideArea) await context.route("**/*", async route => {
+    const url = new URL(route.request().url());
+    if (/\/plugins\/x-milestone(?:\/|$)/.test(decodeURIComponent(url.pathname))) {
+      milestoneRequests.push(url.href);
+      await route.abort("blockedbyclient");
+      return;
+    }
+    if (url.origin === target && url.pathname.startsWith("/api/gpx/")) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        // Do not deliver GPX until the actual navigation HTML is also checked.
+        await Promise.race([viewerApproved, new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error("Viewer HTML approval timed out")), 10_000);
+        })]);
+      } catch {
+        await route.abort("blockedbyclient");
+        return;
+      } finally { clearTimeout(timer); }
+    }
+    await route.fallback();
+  });
+  const openWideViewer = async (href: string, id: string) => {
+    assertRunResource(id, created);
+    const url = new URL(href, target);
+    expect(url.origin).toBe(target);
+    expect(policyTarget.origins).toContain(url.origin);
+    expect([`/s/${id}`, "/viewer.html"]).toContain(url.pathname);
+    let approve!: () => void;
+    viewerApproved = new Promise<void>(resolve => { approve = resolve; });
+    const navigation = await page.goto(url.href, { waitUntil: "commit" });
+    expect(navigation?.status()).toBe(200);
+    expect(navigation?.headers()["content-type"]).toContain("text/html");
+    assertMilestoneDisabledHtml(await navigation!.text());
+    approve();
+  };
+  const checkWideViewer = async (viewer: "shared" | "static") => {
+    // Deployed pages keep app private: check ready UI plus actual GPX geometry,
+    // without replacing their modules or exposing an instrumented app instance.
+    await expect(page.locator(".tilia-status-text")).toContainText(viewer === "shared" ? "Ready" : "Loaded 1 file(s) from query.");
+    const track = page.locator('#map path.leaflet-interactive[fill="none"]').first();
+    await expect(page.locator('#map path.leaflet-interactive[fill="none"]')).toHaveCount(2);
+    await expect(track).toBeVisible();
+    await expect(track).toBeInViewport();
+    await expect(page.locator(".tilia-milestone")).toHaveCount(0);
+    const pane = page.locator("#map .leaflet-map-pane");
+    await expect(pane).not.toHaveClass(/leaflet-zoom-anim/);
+    const beforeZoom = await track.getAttribute("d");
+    await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+    await expect(track).not.toHaveAttribute("d", beforeZoom!);
+    await expect(pane).not.toHaveClass(/leaflet-zoom-anim/);
+    const beforePan = await pane.evaluate(element => element.style.transform);
+    const box = await page.locator("#map").boundingBox();
+    if (!box) throw new Error("Map has no viewport");
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height * 0.7);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 + 80, box.y + box.height * 0.7 + 40, { steps: 8 });
+    await page.mouse.up();
+    await expect.poll(() => pane.evaluate(element => element.style.transform)).not.toBe(beforePan);
+    await expect(page.locator("#viewer-error")).toBeHidden();
+    await expect(page.locator(".tilia-milestone")).toHaveCount(0);
+    expect(milestoneRequests).toEqual([]);
+  };
   await record({ event: "start", target, fixture: fixture.name });
   try {
     const response = await page.goto("/?lang=en");
@@ -79,7 +201,8 @@ for (const fixture of cases) test(fixture.name, async ({ page, context, request 
     expect(shareUrl.origin).toBe(target);
     expect(shareUrl.pathname).toBe(`/s/${receipt.id}`);
     const xmlResponse = page.waitForResponse(r => new URL(r.url()).origin === target && new URL(r.url()).pathname === `/api/gpx/${receipt.id}`);
-    expect((await page.goto(shareUrl.href))?.status()).toBe(200);
+    if (wideArea) await openWideViewer(shareUrl.href, receipt.id);
+    else expect((await page.goto(shareUrl.href))?.status()).toBe(200);
     const retrieved = await xmlResponse;
     expect(retrieved.status()).toBe(200);
     expect(retrieved.headers()["content-type"]).toContain("application/gpx+xml");
@@ -99,6 +222,7 @@ for (const fixture of cases) test(fixture.name, async ({ page, context, request 
       message: "At least one visible GPX element must intersect the map viewport",
     }).toBe(true);
     await expect(page.locator("#viewer-error")).toBeHidden();
+    if (wideArea) await checkWideViewer("shared");
     if (fixture.name === "rich mixed") {
       await page.locator(".tilia-route-point-marker").first().click();
       await expect(page.locator(".leaflet-popup-content")).toContainText("Start");
@@ -111,10 +235,13 @@ for (const fixture of cases) test(fixture.name, async ({ page, context, request 
       await expect(page.locator(".tilia-route-point-marker")).toHaveCount(2);
     }
     await downloadAndCompare(page, fixture.expected);
-    await page.goto(`/viewer.html?gpx=${encodeURIComponent(`${target}/api/gpx/${receipt.id}`)}`);
+    const staticUrl = `/viewer.html?gpx=${encodeURIComponent(`${target}/api/gpx/${receipt.id}`)}`;
+    if (wideArea) await openWideViewer(staticUrl, receipt.id);
+    else await page.goto(staticUrl);
     await expect.poll(hasVisibleGpxInViewport, {
       message: "At least one visible GPX element must intersect the map viewport",
     }).toBe(true);
+    if (wideArea) await checkWideViewer("static");
     await downloadAndCompare(page, fixture.expected);
     expect(errors, "Unhandled page errors/rejections").toEqual([]);
     expect(failedAssets, "Script/stylesheet HTTP failures").toEqual([]);
