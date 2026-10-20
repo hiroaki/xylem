@@ -114,6 +114,81 @@ docker compose up --build
 ```
 
 
+## Phase D staging受入テスト
+
+`npm run test:staging` は配備済みstagingを対象に、GPX正規化・アップロード、canonical取得、プレビュー・共有・静的ビューアー、export・再解析、cleanupを確認します。実際のstaging KVにリソースを作成するため、対象を確認して書き込みを承認したうえで手動実行してください。オフラインテストやデプロイコマンドではありません。
+
+### 前提と実行方法
+
+プロジェクト固定のテスト環境であるNode.js 24.19.0、npm 11.17.0、Playwright 1.60.0と対応するChromiumを使用します。依存は `package-lock.json` から `npm ci` で導入し、必要なら `npx playwright install chromium` でブラウザを導入します。配備済みサービスと必要なasset originへ到達でき、Chromium・Node側HTTP通信の両方がstaging証明書を信頼できる必要があります。バックエンドのAPIキーや削除シークレットをテストへ渡す必要はありません。
+
+運用者が管理するローカルJSONファイルに、`origins` 配列だけを記載します。次の例の対象・asset originを、承認された環境に合わせてください。
+
+```json
+{
+  "origins": [
+    "https://staging.example.test",
+    "https://unpkg.com",
+    "https://cdn.jsdelivr.net",
+    "https://tile.openstreetmap.org"
+  ]
+}
+```
+
+Xylem checkoutで実行します。
+
+```bash
+export GPX_STAGING_BASE_URL=https://staging.example.test
+export GPX_STAGING_ALLOWLIST_FILE=/path/to/local/phase-d-staging.json
+export GPX_STAGING_WRITE_OPT_IN=I_UNDERSTAND_THIS_WRITES_STAGING_KV
+
+npm run test:staging
+```
+
+`GPX_STAGING_BASE_URL` はパス・認証情報・query・fragmentを含まない正規のHTTPS originです。`GPX_STAGING_ALLOWLIST_FILE` はローカル許可リストのパスで、対象originと、配備フロントエンドが必要とする承認済み外部asset originをすべて明示します。`GPX_STAGING_WRITE_OPT_IN` は上記文字列との完全一致が必要です。暗黙のstaging既定値はありません。
+
+macOS Keychainで信頼する開発用CAを使う場合、対応するNodeではsystem CA storeの有効化が必要なことがあります。
+
+```bash
+NODE_OPTIONS=--use-system-ca npm run test:staging
+```
+
+これは環境依存であり、すべての環境に必須ではありません。TLS証明書検証を有効なまま、環境に適した信頼ストアを設定してください。`NODE_OPTIONS` 設定時には、ほかに必要な既存オプションも維持してください。
+
+### 安全策とcleanup記録
+
+ブラウザのrequest guardはoriginを完全一致で検証し、同一originを含むすべてのHTTP 3xxを拒否します。`maxRedirects: 0`・`maxRetries: 0` を使用し、外部originは読み取り専用のsubresource取得先に限定し、navigation先にはしません。WebSocketは拒否、Service Workerは無効です。テストは逐次実行・retryなし・最初の失敗で打ち切ります。canonical確認用の明示API GETは、承認済みstaging originと当該テストで作成したIDだけを対象とし、redirect・retryは0、timeoutは10秒です。HTTP 200とGPX Content-Typeを確認してから解析します。
+
+ブラウザ応答のstatus・Content-Type確認も維持しています。guard経由のBlob/File応答をPlaywrightが空本文として取得する場合があるため、canonical比較は明示API GETを使用します。描画確認は、地図とブラウザ画面の両方に交差する可視GPX要素が少なくとも1つあることを要求し、水平SVG pathの高さ0やDOM順には依存しません。
+
+各テストは削除用capabilityをメモリ内だけに保持し、自分で作成したIDに限って `finally` でcleanupを試みます。削除はHTTP 200、その後の時間制限付き読み取り専用GET pollingは404を要求します。このpollingは書き込みretryや自動HTTP・テストretryとは別です。アップロードを自動再試行しません。
+
+`test-results/staging/<run-directory>/<case>/created-resources.jsonl`（作成時mode 0600）に、start・upload-started・created・acceptance-passed・cleanup status・cleanup-failedを記録します。tokenやGPX本文は記録しません。テスト生成物・環境ファイル・認証情報はコミットしないでください。
+
+時刻とケース記録から対象runのディレクトリを特定し、以前のrunと混ぜないでください。次のように必要な項目だけを選択して確認できます。
+
+```bash
+run_dir=test-results/staging/REPLACE_WITH_THE_RUN_DIRECTORY
+find "$run_dir" -name created-resources.jsonl -exec jq -c '{at, run, event, fixture, id, status}' {} \;
+```
+
+各ケースで作成IDとcleanup HTTP 200を対応付け、作成数と正常cleanup数の一致、欠落・`cleanup-failed` の有無を確認します。`upload-started` に対応する作成IDがなければ調査が必要です。無関係なリソースを列挙・削除しないでください。`acceptance-passed` はcleanup前の記録なので、そのイベントやrunnerのPASS表示とは独立にcleanupを確認してください。台帳確認は記録された削除応答の検証であり、新しい問い合わせによる独立したストレージ確認ではありません。
+
+### 受入確認済みの結果
+
+2026-10-21（Asia/Tokyo）にユーザーが手動実行し、**5 passed** を確認しました。対応する5件のケース台帳を別途照合し、**作成IDは重複なしで5件、対応するcleanup HTTP 200は5件、cleanup欠落・cleanup-failedは0件**でした。この台帳確認のための追加stagingリクエストは行っていません。
+
+| ケース | 結果 |
+| --- | --- |
+| rich mixed | PASS |
+| single-point waypoint | PASS |
+| single-point route | PASS |
+| single-point track | PASS |
+| accepted route boundary 20 routes x 100 points | PASS |
+
+5ケースのstaging受入実行とcleanup記録の確認が完了したことを示します。Phase E全体のartifact・cache・release確認、独立したOGP受入、production配備の完了を示すものではありません。実際の24時間経過による失効も、このrunでは検証していません。
+
+
 ## デプロイ
 
 TODO: デプロイ手順を追加する
