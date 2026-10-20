@@ -16,6 +16,20 @@ const { target } = policyTarget;
 for (const fixture of cases) test(fixture.name, async ({ page, context, request }, info) => {
   const errors: string[] = [], failedAssets: string[] = [];
   const created = new Map<string, string>(); // deletion capabilities remain memory-only
+  // A horizontal SVG path has zero layout height despite its painted stroke.
+  // Check any visible GPX element against both the map and browser viewport.
+  const hasVisibleGpxInViewport = () => page.locator("#map").locator(
+    ".leaflet-marker-icon:visible, path.leaflet-interactive:visible",
+  ).evaluateAll(elements => {
+    const map = document.querySelector("#map");
+    if (!map) return false;
+    const bounds = map.getBoundingClientRect();
+    return elements.some(element => {
+      const rect = element.getBoundingClientRect();
+      return Math.min(rect.right, bounds.right, innerWidth) > Math.max(rect.left, bounds.left, 0)
+        && Math.min(rect.bottom, bounds.bottom, innerHeight) > Math.max(rect.top, bounds.top, 0);
+    });
+  });
   const ledger = info.outputPath("created-resources.jsonl");
   const record = (event: object) => appendFile(ledger, JSON.stringify({ at: new Date().toISOString(), run: info.testId, ...event }) + "\n", { mode: 0o600 });
   page.on("pageerror", error => errors.push(error.message));
@@ -44,8 +58,9 @@ for (const fixture of cases) test(fixture.name, async ({ page, context, request 
     const normalizeFile = (await (new Response(new Uint8Array(preview.request().postDataBuffer() ?? []).buffer, { headers: { "Content-Type": preview.request().headers()["content-type"] } })).formData()).get("file") as File;
     expect(await normalizeFile.text()).toBe(input);
     await expect(page.locator("#upload-button")).toBeEnabled();
-    await expect(page.locator(".leaflet-marker-icon, path.leaflet-interactive").first()).toBeVisible();
-    await expect(page.locator(".leaflet-marker-icon, path.leaflet-interactive").first()).toBeInViewport();
+    await expect.poll(hasVisibleGpxInViewport, {
+      message: "At least one visible GPX element must intersect the map viewport",
+    }).toBe(true);
     const uploading = page.waitForResponse(r => r.request().method() === "POST" && new URL(r.url()).pathname === "/api/upload");
     await record({ event: "upload-started", filename: name });
     await page.locator("#upload-button").click(); // exactly one upload, no retries
@@ -68,9 +83,21 @@ for (const fixture of cases) test(fixture.name, async ({ page, context, request 
     const retrieved = await xmlResponse;
     expect(retrieved.status()).toBe(200);
     expect(retrieved.headers()["content-type"]).toContain("application/gpx+xml");
-    expect(processGpxInput(await retrieved.text(), policy)).toEqual(fixture.expected);
-    await expect(page.locator(".leaflet-marker-icon, path.leaflet-interactive").first()).toBeVisible();
-    await expect(page.locator(".leaflet-marker-icon, path.leaflet-interactive").first()).toBeInViewport();
+    // Guarded Blob/File responses can have an empty Playwright browser body.
+    // Keep the browser checks above; verify XML through one explicit, scoped GET.
+    assertRunResource(receipt.id, created);
+    const gpxUrl = new URL(`/api/gpx/${encodeURIComponent(receipt.id)}`, target);
+    expect(gpxUrl.origin).toBe(target);
+    expect(policyTarget.origins).toContain(gpxUrl.origin);
+    const canonicalResponse = await request.get(gpxUrl.href, {
+      maxRedirects: 0, maxRetries: 0, timeout: 10_000,
+    });
+    expect(canonicalResponse.status()).toBe(200);
+    expect(canonicalResponse.headers()["content-type"]).toContain("application/gpx+xml");
+    expect(processGpxInput(await canonicalResponse.text(), policy)).toEqual(fixture.expected);
+    await expect.poll(hasVisibleGpxInViewport, {
+      message: "At least one visible GPX element must intersect the map viewport",
+    }).toBe(true);
     await expect(page.locator("#viewer-error")).toBeHidden();
     if (fixture.name === "rich mixed") {
       await page.locator(".tilia-route-point-marker").first().click();
@@ -85,8 +112,9 @@ for (const fixture of cases) test(fixture.name, async ({ page, context, request 
     }
     await downloadAndCompare(page, fixture.expected);
     await page.goto(`/viewer.html?gpx=${encodeURIComponent(`${target}/api/gpx/${receipt.id}`)}`);
-    await expect(page.locator(".leaflet-marker-icon, path.leaflet-interactive").first()).toBeVisible();
-    await expect(page.locator(".leaflet-marker-icon, path.leaflet-interactive").first()).toBeInViewport();
+    await expect.poll(hasVisibleGpxInViewport, {
+      message: "At least one visible GPX element must intersect the map viewport",
+    }).toBe(true);
     await downloadAndCompare(page, fixture.expected);
     expect(errors, "Unhandled page errors/rejections").toEqual([]);
     expect(failedAssets, "Script/stylesheet HTTP failures").toEqual([]);
