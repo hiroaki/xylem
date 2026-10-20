@@ -118,6 +118,8 @@ docker compose up --build
 
 `npm run test:staging` exercises an already-deployed staging system: GPX normalization/upload, canonical retrieval, preview/shared/static viewers, export/reparse and cleanup. It creates real staging KV resources. Run it manually only after reviewing the target and authorizing those writes; it is not an offline test or a deployment command.
 
+The suite contains six scenarios, listed in the results table below. `wide-area B5` checks both deployed viewers with the original wide-area geometry: inspected plugin configuration before GPX delivery, no milestone plugin/markers, visible rendering, responsive pan/zoom and valid downloads. `x-milestone` is intentionally disabled pending a separate redesign; its bundled implementation is retained. The reusable fixture is `test/fixtures/b5-wide-area.gpx`, derived from `test/helpers/phase-b5.ts`; local viewer regression coverage is in `test/browser/wide-area.spec.ts`.
+
 ### Prerequisites and execution
 
 Use the project-pinned test toolchain: Node.js 24.19.0, npm 11.17.0 and Playwright 1.60.0, with the matching Chromium installed. Install dependencies from `package-lock.json` (`npm ci`); if needed, install the browser with `npx playwright install chromium`. The deployed services and required asset origins must be reachable, and the staging certificate must be trusted by both Chromium and Node-side HTTP requests. No backend API keys or deletion secrets are supplied to the suite.
@@ -143,6 +145,13 @@ export GPX_STAGING_ALLOWLIST_FILE=/path/to/local/phase-d-staging.json
 export GPX_STAGING_WRITE_OPT_IN=I_UNDERSTAND_THIS_WRITES_STAGING_KV
 
 npm run test:staging
+```
+
+To list and then manually run only the wide-area case with the same safety controls:
+
+```bash
+npm run test:staging -- --grep 'wide-area B5' --list
+npm run test:staging -- --grep 'wide-area B5'
 ```
 
 `GPX_STAGING_BASE_URL` must be a canonical HTTPS origin, with no path, credentials, query or fragment. `GPX_STAGING_ALLOWLIST_FILE` names the local allowlist; it must explicitly include that origin and every approved external asset origin required by the deployed frontend. `GPX_STAGING_WRITE_OPT_IN` must exactly match the value above. None has an implicit staging default.
@@ -176,7 +185,7 @@ For every case, match each created ID with a cleanup status 200, check that crea
 
 ### Verified acceptance status
 
-On 2026-10-21 (Asia/Tokyo), the user manually ran the suite and reported **5 passed**. The corresponding five case ledgers were separately reviewed: **5 unique created resources, 5 matching cleanup HTTP 200 records, no missing cleanup and no cleanup-failed events**. No additional staging requests were made for this ledger review.
+On 2026-10-21 (Asia/Tokyo), after the deployment disabling `x-milestone`, the user reported the original five cases passing and separately ran `wide-area B5`: **1 passed (8.3s total; 7.6s test)**. The focused ledger independently confirms **1 created resource, matching acceptance-passed and cleanup HTTP 200, no missing cleanup and no cleanup-failed event**. The earlier five-case cleanup audit recorded 5 matching successful deletions. Post-cleanup GET status is not recorded in the focused ledger; the passing test includes a 404 assertion, but the individual response cannot be audited from this ledger. No additional staging requests were made.
 
 | Scenario | Result |
 | --- | --- |
@@ -185,8 +194,9 @@ On 2026-10-21 (Asia/Tokyo), the user manually ran the suite and reported **5 pas
 | single-point route | PASS |
 | single-point track | PASS |
 | accepted route boundary 20 routes x 100 points | PASS |
+| wide-area B5 | PASS (focused run) |
 
-This completes the five-case staging acceptance run and its cleanup-record review. It does not establish completion of all Phase E artifact/cache/release checks, independent OGP acceptance or production deployment. Actual 24-hour expiry is not demonstrated by this run.
+All six scenarios have passed across separate runs, not one six-case execution. The focused wide-area release blocker is resolved for the release with `x-milestone` disabled; the plugin defect itself is not repaired. Production artifact/revision/cache checks and deployment remain separate. Actual 24-hour expiry was not tested.
 
 
 ## Deployment

@@ -118,6 +118,8 @@ docker compose up --build
 
 `npm run test:staging` は配備済みstagingを対象に、GPX正規化・アップロード、canonical取得、プレビュー・共有・静的ビューアー、export・再解析、cleanupを確認します。実際のstaging KVにリソースを作成するため、対象を確認して書き込みを承認したうえで手動実行してください。オフラインテストやデプロイコマンドではありません。
 
+現在の対象は下の結果表にある6ケースです。`wide-area B5` は元の広域geometryを使い、両配備済みビューアーでGPX応答前のplugin設定検査、milestoneプラグイン・マーカーの不在、可視描画、pan/zoomの応答、ダウンロードの妥当性を確認します。`x-milestone` は別途再設計するまで意図的に無効化しており、配布実装は保持しています。再利用fixtureは `test/helpers/phase-b5.ts` 由来の `test/fixtures/b5-wide-area.gpx`、ローカル回帰試験は `test/browser/wide-area.spec.ts` です。
+
 ### 前提と実行方法
 
 プロジェクト固定のテスト環境であるNode.js 24.19.0、npm 11.17.0、Playwright 1.60.0と対応するChromiumを使用します。依存は `package-lock.json` から `npm ci` で導入し、必要なら `npx playwright install chromium` でブラウザを導入します。配備済みサービスと必要なasset originへ到達でき、Chromium・Node側HTTP通信の両方がstaging証明書を信頼できる必要があります。バックエンドのAPIキーや削除シークレットをテストへ渡す必要はありません。
@@ -143,6 +145,13 @@ export GPX_STAGING_ALLOWLIST_FILE=/path/to/local/phase-d-staging.json
 export GPX_STAGING_WRITE_OPT_IN=I_UNDERSTAND_THIS_WRITES_STAGING_KV
 
 npm run test:staging
+```
+
+同じ安全策で広域ケースだけを一覧表示し、手動実行するには次を使います。
+
+```bash
+npm run test:staging -- --grep 'wide-area B5' --list
+npm run test:staging -- --grep 'wide-area B5'
 ```
 
 `GPX_STAGING_BASE_URL` はパス・認証情報・query・fragmentを含まない正規のHTTPS originです。`GPX_STAGING_ALLOWLIST_FILE` はローカル許可リストのパスで、対象originと、配備フロントエンドが必要とする承認済み外部asset originをすべて明示します。`GPX_STAGING_WRITE_OPT_IN` は上記文字列との完全一致が必要です。暗黙のstaging既定値はありません。
@@ -176,7 +185,7 @@ find "$run_dir" -name created-resources.jsonl -exec jq -c '{at, run, event, fixt
 
 ### 受入確認済みの結果
 
-2026-10-21（Asia/Tokyo）にユーザーが手動実行し、**5 passed** を確認しました。対応する5件のケース台帳を別途照合し、**作成IDは重複なしで5件、対応するcleanup HTTP 200は5件、cleanup欠落・cleanup-failedは0件**でした。この台帳確認のための追加stagingリクエストは行っていません。
+2026-10-21（Asia/Tokyo）、`x-milestone` 無効化後の配備に対して、ユーザーから既存5ケースの成功報告があり、別途 `wide-area B5` も **1 passed（全体8.3秒、テスト7.6秒）** でした。広域runの台帳を別途照合し、**作成1件とacceptance-passed・cleanup HTTP 200のIDが一致し、cleanup欠落・cleanup-failedは0件**と確認しました。以前の5ケースのcleanup監査では5件の正常削除を確認済みです。広域runの台帳には削除後GETのstatusを記録していません。成功したテストは404のassertionを含みますが、個別応答はこの台帳から監査できません。追加stagingリクエストは行っていません。
 
 | ケース | 結果 |
 | --- | --- |
@@ -185,8 +194,9 @@ find "$run_dir" -name created-resources.jsonl -exec jq -c '{at, run, event, fixt
 | single-point route | PASS |
 | single-point track | PASS |
 | accepted route boundary 20 routes x 100 points | PASS |
+| wide-area B5 | PASS（個別run） |
 
-5ケースのstaging受入実行とcleanup記録の確認が完了したことを示します。Phase E全体のartifact・cache・release確認、独立したOGP受入、production配備の完了を示すものではありません。実際の24時間経過による失効も、このrunでは検証していません。
+6ケースは別々のrunで成功しており、6ケース一括実行の結果ではありません。`x-milestone` を無効化する今回のリリース方針では、広域GPXのブロッカーは解消確認済みです。プラグイン自体の欠陥は未修正です。本番artifact・revision・cache確認と配備は別途行います。実際の24時間失効は検証していません。
 
 
 ## デプロイ
