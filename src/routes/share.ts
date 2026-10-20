@@ -581,13 +581,15 @@ function viewerTemplate(): string {
         if (active) {
           app = createDefaultTiliaApp("map", {
             baseMapOptions: { zoom: 1, center: [0.0, 139.7413575] },
+            // x-milestone is temporarily disabled: wide-area GPX can trigger excessive
+            // synchronous marker generation; a separate redesign is pending.
             plugins: [
               "tilia-gpx-input", "tilia-gpx-renderer", "tilia-gpx-ui",
               "tilia-map-selection-presenter",
               "tilia-status", "tilia-base-maps-control", "tilia-layers",
               "tilia-elevation", "tilia-query-import",
               "x-gsi-base-maps", "x-opentopomap-base-maps",
-              "x-milestone", "x-gpx-export",
+              "x-gpx-export",
             ],
           });
           await app.ready;

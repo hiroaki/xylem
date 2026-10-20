@@ -1,6 +1,6 @@
 import { test, expect, mixed, seed, calls } from "./harness.js";
 
-const plugins = ["tilia-gpx-domain", "tilia-gpx-input", "tilia-gpx-renderer", "tilia-gpx-ui", "tilia-map-selection-presenter", "tilia-status", "tilia-base-maps-control", "tilia-panel", "tilia-toolbar", "tilia-layers", "tilia-elevation", "tilia-query-import", "x-gsi-base-maps", "x-opentopomap-base-maps", "x-milestone", "x-gpx-export"];
+const plugins = ["tilia-gpx-domain", "tilia-gpx-input", "tilia-gpx-renderer", "tilia-gpx-ui", "tilia-map-selection-presenter", "tilia-status", "tilia-base-maps-control", "tilia-panel", "tilia-toolbar", "tilia-layers", "tilia-elevation", "tilia-query-import", "x-gsi-base-maps", "x-opentopomap-base-maps", "x-gpx-export"];
 async function active(page: any, count = 1) {
   await expect.poll(() => page.evaluate(() => (window as any).c2?.app.rendering.list().map((s: any) => s.state))).toEqual(Array(count).fill("active"));
 }
