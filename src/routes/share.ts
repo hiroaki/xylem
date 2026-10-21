@@ -6,7 +6,7 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { getConfig } from "../config.js";
+import { getConfig, type Config } from "../config.js";
 
 const router = new Hono();
 
@@ -24,7 +24,7 @@ function getCachePath(id: string): string {
   return join(CACHE_DIR, `${id}.html`);
 }
 
-async function readCache(id: string): Promise<string | null> {
+async function readCache(id: string, ogImageUrl: string | undefined): Promise<string | null> {
   const path = getCachePath(id);
 
   try {
@@ -34,7 +34,12 @@ async function readCache(id: string): Promise<string | null> {
       return null;
     }
 
-    return await readFile(path, "utf8");
+    const html = await readFile(path, "utf8");
+    // A retained cache directory may outlive a change to the image origin.
+    // Match the metadata emitted by this template without changing paths/TTL.
+    const cachedImageUrl = /<meta property="og:image" content="([^"]*)">/.exec(html)?.[1];
+    if (cachedImageUrl !== (ogImageUrl === undefined ? undefined : escapeHtmlAttribute(ogImageUrl))) return null;
+    return html;
   } catch (error) {
     if (
       typeof error === "object" &&
@@ -413,7 +418,10 @@ router.get("/s/:id", async (c) => {
 async function serveShare(c: Context, id: string) {
   assertPublicId(id, "share");
 
-  const cachedHtml = await readCache(id);
+  const config = getConfig();
+  const ogImageUrl = config.chloroplastPublicOrigin === undefined ? undefined
+    : `${config.chloroplastPublicOrigin}/og/${encodeURIComponent(id)}`;
+  const cachedHtml = await readCache(id, ogImageUrl);
 
   if (cachedHtml !== null) {
     return c.html(cachedHtml);
@@ -427,7 +435,7 @@ async function serveShare(c: Context, id: string) {
     return c.html(html);
   }
 
-  const generation = generateShareHtml(c, id);
+  const generation = generateShareHtml(c, id, config, ogImageUrl);
 
   inFlight.set(id, generation);
 
@@ -447,27 +455,26 @@ export default router;
 async function generateShareHtml(
   c: Context,
   id: string,
+  config: Config,
+  ogImageUrl: string | undefined,
 ): Promise<string> {
-  const config = getConfig();
   const canonicalDocument = await retrieveCanonicalGpx(c, id, config.gpxPolicy, "share");
   const metadata = getMetadata(canonicalDocument);
 
   const shareUrl =
     `${config.xylemPublicOrigin}/s/${encodeURIComponent(id)}`;
 
-  const ogImageUrl =
-    `${config.chloroplastPublicOrigin}/og/${encodeURIComponent(id)}`;
-
   const values: Record<string, string> = {
     TITLE: escapeHtmlText(`${metadata.title} - GPX Share (beta)`),
     OG_TITLE: escapeHtmlAttribute(`${metadata.title} - GPX Share (beta)`),
     OG_DESCRIPTION: escapeHtmlAttribute(metadata.description),
     OG_URL: escapeHtmlAttribute(shareUrl),
-    OG_IMAGE: escapeHtmlAttribute(ogImageUrl),
+    OG_IMAGE_METADATA: ogImageUrl === undefined ? ""
+      : `<meta property="og:image" content="${escapeHtmlAttribute(ogImageUrl)}">\n    <meta name="twitter:card" content="summary_large_image">`,
     // UUID validation restricts this value in the inline JavaScript string too.
     ID: id,
   };
-  return viewerTemplate().replace(/\{\{(TITLE|OG_TITLE|OG_DESCRIPTION|OG_URL|OG_IMAGE|ID)\}\}/g,
+  return viewerTemplate().replace(/\{\{(TITLE|OG_TITLE|OG_DESCRIPTION|OG_URL|OG_IMAGE_METADATA|ID)\}\}/g,
     (_match, key: string) => values[key]);
 }
 
@@ -482,8 +489,7 @@ function viewerTemplate(): string {
     <meta property="og:title" content="{{OG_TITLE}}">
     <meta property="og:description" content="{{OG_DESCRIPTION}}">
     <meta property="og:url" content="{{OG_URL}}">
-    <meta property="og:image" content="{{OG_IMAGE}}">
-    <meta name="twitter:card" content="summary_large_image">
+    {{OG_IMAGE_METADATA}}
     <title>{{TITLE}}</title>
     <link
       rel="stylesheet"

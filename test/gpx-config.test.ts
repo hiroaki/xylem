@@ -16,6 +16,28 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllEnvs());
 
+describe("optional Chloroplast origin", () => {
+  it.each([undefined, ""])("starts the application with origin %j", value => {
+    vi.stubEnv("CHLOROPLAST_PUBLIC_ORIGIN", value);
+    expect(getConfig().chloroplastPublicOrigin).toBeUndefined();
+    const result = spawnSync(process.execPath, ["--import", "tsx", "--input-type=module", "-e",
+      'const { createApp } = await import("./src/app.ts"); console.log((await createApp().request("http://local/api/health")).status);',
+    ], { env: { ...process.env }, encoding: "utf8", timeout: 5000 });
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim()).toBe("200");
+  });
+  it("preserves the configured URL without normalization", () => {
+    const value = "HTTPS://Images.example/prefix/";
+    vi.stubEnv("CHLOROPLAST_PUBLIC_ORIGIN", value);
+    expect(getConfig().chloroplastPublicOrigin).toBe(value);
+  });
+  it.each(["not-a-url", " ", "ftp://images.example", "javascript:alert(1)"])("rejects nonempty invalid origin %j", value => {
+    vi.stubEnv("CHLOROPLAST_PUBLIC_ORIGIN", value);
+    expect(() => getConfig()).toThrow(/Environment variable must be .*CHLOROPLAST_PUBLIC_ORIGIN/);
+  });
+});
+
 describe("D14 startup configuration (L04)", () => {
   it.each(["", "1", "200", "999999", "not-a-number"])("ignores retired name-length environment setting %s", raw => {
     vi.stubEnv("XYLEM_GPX_MAX_NAME_LENGTH", raw);

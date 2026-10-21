@@ -67,6 +67,49 @@ it.each(["http://localhost:8080/prefix/", "HTTPS://Example.com/path/?q=1"])("pre
   const {getConfig} = await import("../src/config.js");
   expect(getConfig().xylemPublicOrigin).toBe(value); expect(getConfig().chloroplastPublicOrigin).toBe(value);
 });
+it("preserves configured image metadata, URL prefix and HTML escaping on fresh and cached pages", async () => {
+  const origin = 'https://og.example/prefix/?a=1&b="quoted"<value>';
+  vi.stubEnv("CHLOROPLAST_PUBLIC_ORIGIN", origin);
+  const first = await get(); expect(first.status).toBe(200);
+  const html = await first.text(), all = nodes(parse(html));
+  expect(attr(all.find(n => attr(n, "property") === "og:image"), "content")).toBe(`${origin}/og/${shareId}`);
+  expect(attr(all.find(n => attr(n, "name") === "twitter:card"), "content")).toBe("summary_large_image");
+  expect(html).toContain("&amp;b=&quot;quoted&quot;&lt;value&gt;");
+  expect(all.some(n => n.tagName === "value")).toBe(false);
+  expect(await (await get()).text()).toBe(html); expect(ctx.fetchMock).toHaveBeenCalledOnce();
+});
+it.each([undefined, ""])("serves ordinary share pages without image metadata for origin %j", async value => {
+  const configured = nodes(parse(await (await get()).text()));
+  vi.stubEnv("CHLOROPLAST_PUBLIC_ORIGIN", value);
+  const response = await get(); expect(response.status).toBe(200);
+  const html = await response.text(), all = nodes(parse(html));
+  for (const property of ["og:type", "og:title", "og:description", "og:url"]) {
+    expect(attr(all.find(n => attr(n, "property") === property), "content"))
+      .toBe(attr(configured.find(n => attr(n, "property") === property), "content"));
+  }
+  expect(all.filter(n => n.tagName === "meta" && (
+    attr(n, "property")?.startsWith("og:image") || attr(n, "name")?.startsWith("twitter:image")
+    || attr(n, "name") === "twitter:card"
+  ))).toEqual([]);
+  expect(all.filter(n => n.tagName === "script").map(text)).toEqual(configured.filter(n => n.tagName === "script").map(text));
+  expect(text(all.find(n => n.tagName === "title"))).toBe("Sample - GPX Share (beta)");
+  expect(html).not.toContain("undefined/og/");
+  expect(html).toContain(`loadGpx("${shareId}")`);
+  expect(await (await get()).text()).toBe(html); expect(ctx.fetchMock).toHaveBeenCalledTimes(2);
+  expect((await ctx.app.request(`https://local/api/gpx/${shareId}`)).status).toBe(200);
+});
+it("regenerates retained HTML when the image origin changes, but shares absent/empty cache entries", async () => {
+  await get();
+  vi.stubEnv("CHLOROPLAST_PUBLIC_ORIGIN", undefined);
+  const withoutImages = await (await get()).text(); expect(ctx.fetchMock).toHaveBeenCalledTimes(2);
+  vi.stubEnv("CHLOROPLAST_PUBLIC_ORIGIN", "");
+  expect(await (await get()).text()).toBe(withoutImages); expect(ctx.fetchMock).toHaveBeenCalledTimes(2);
+  vi.stubEnv("CHLOROPLAST_PUBLIC_ORIGIN", "https://new-og.example");
+  const changed = nodes(parse(await (await get()).text()));
+  expect(attr(changed.find(n => attr(n, "property") === "og:image"), "content")).toBe(`https://new-og.example/og/${shareId}`);
+  expect(ctx.fetchMock).toHaveBeenCalledTimes(3);
+  expect(await fs.readdir(ctx.cache)).toEqual([shareId + ".html"]);
+});
 it("reuses cache and invalidates only at the existing 24-hour boundary", async () => {
   const first = await get(); const html = await first.text();
   const path = join(ctx.cache, shareId + ".html"); const mtime = (await fs.stat(path)).mtimeMs;
