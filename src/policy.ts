@@ -7,5 +7,6 @@
 export type GpxPolicy = {
   maxRawBytes: number;
   maxTotalPoints: number;
-  maxNameLength: number;
+  maxRoutes: number;
+  maxRoutePointsPerRoute: number;
 };

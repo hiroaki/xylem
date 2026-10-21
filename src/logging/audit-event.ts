@@ -5,7 +5,9 @@ export type AuditResult = "success" | "failure";
 export type AuditFailureReason =
   | "anemochore_rejected"
   | "anemochore_unreachable"
-  | "anemochore_invalid_response";
+  | "anemochore_invalid_response"
+  | "invalid_id" | "not_found" | "timeout" | "body_read" | "utf8"
+  | "json" | "resource" | "schema" | "retrieval_internal";
 
 type AuditEventPayload = {
   event: string;

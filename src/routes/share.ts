@@ -1,64 +1,19 @@
+import { assertPublicId, retrieveCanonicalGpx } from "../services/canonical-gpx.js";
+import { retrievalErrorResponse } from "./retrieval-error.js";
+import { emitAuditEvent } from "../logging/audit-event.js";
+import type { CanonicalCoordinates, CanonicalTrack, CanonicalRoute, CanonicalWaypoint, CanonicalGpxDocument } from "../gpx/contract.js";
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { getConfig } from "../config.js";
-import { createAnemochoreClient } from "../services/anemochore.js";
+import { getConfig, type Config } from "../config.js";
 
 const router = new Hono();
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const CACHE_DIR = process.env.SHARE_CACHE_DIR ?? "/tmp/gpx-share";
 
-const inFlight = new Map<string, Promise<string | null>>();
-
-function isValidId(id: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    id,
-  );
-}
-
-type CanonicalCoordinates =
-  | [number, number]
-  | [number, number, number];
-
-type CanonicalPoint = {
-  coordinates: CanonicalCoordinates;
-  time?: string;
-};
-
-type CanonicalSegment = {
-  points: CanonicalPoint[];
-};
-
-type CanonicalTrack = {
-  name?: string;
-  segments: CanonicalSegment[];
-};
-
-type CanonicalRoutePoint = {
-  coordinates: CanonicalCoordinates;
-};
-
-type CanonicalRoute = {
-  name?: string;
-  points: CanonicalRoutePoint[];
-};
-
-type CanonicalWaypoint = {
-  coordinates: CanonicalCoordinates;
-  name?: string;
-};
-
-type CanonicalGpxDocument = {
-  schema_version: 1;
-  data_type: "gpx";
-  data: {
-    tracks: CanonicalTrack[];
-    routes: CanonicalRoute[];
-    waypoints: CanonicalWaypoint[];
-  };
-};
+const inFlight = new Map<string, Promise<string>>();
 
 type Metadata = {
   title: string;
@@ -69,7 +24,7 @@ function getCachePath(id: string): string {
   return join(CACHE_DIR, `${id}.html`);
 }
 
-async function readCache(id: string): Promise<string | null> {
+async function readCache(id: string, ogImageUrl: string | undefined): Promise<string | null> {
   const path = getCachePath(id);
 
   try {
@@ -79,7 +34,12 @@ async function readCache(id: string): Promise<string | null> {
       return null;
     }
 
-    return await readFile(path, "utf8");
+    const html = await readFile(path, "utf8");
+    // A retained cache directory may outlive a change to the image origin.
+    // Match the metadata emitted by this template without changing paths/TTL.
+    const cachedImageUrl = /<meta property="og:image" content="([^"]*)">/.exec(html)?.[1];
+    if (cachedImageUrl !== (ogImageUrl === undefined ? undefined : escapeHtmlAttribute(ogImageUrl))) return null;
+    return html;
   } catch (error) {
     if (
       typeof error === "object" &&
@@ -446,13 +406,22 @@ function escapeHtmlText(value: string): string {
 }
 
 router.get("/s/:id", async (c) => {
-  const id = c.req.param("id");
-
-  if (!isValidId(id)) {
-    return c.text("Not Found", 404);
+  emitAuditEvent(c, {event: "gpx_retrieval_requested", result: "success"});
+  try {
+    return await serveShare(c, c.req.param("id"));
+  } catch (error) {
+    return retrievalErrorResponse(c, error);
   }
+});
 
-  const cachedHtml = await readCache(id);
+// The route classifies failures from both generation and in-flight waiters.
+async function serveShare(c: Context, id: string) {
+  assertPublicId(id, "share");
+
+  const config = getConfig();
+  const ogImageUrl = config.chloroplastPublicOrigin === undefined ? undefined
+    : `${config.chloroplastPublicOrigin}/og/${encodeURIComponent(id)}`;
+  const cachedHtml = await readCache(id, ogImageUrl);
 
   if (cachedHtml !== null) {
     return c.html(cachedHtml);
@@ -463,21 +432,15 @@ router.get("/s/:id", async (c) => {
   if (existing) {
     const html = await existing;
 
-    return html === null
-      ? c.text("Not Found", 404)
-      : c.html(html);
+    return c.html(html);
   }
 
-  const generation = generateShareHtml(c, id);
+  const generation = generateShareHtml(c, id, config, ogImageUrl);
 
   inFlight.set(id, generation);
 
   try {
     const html = await generation;
-
-    if (html === null) {
-      return c.text("Not Found", 404);
-    }
 
     await writeCache(id, html);
 
@@ -485,64 +448,34 @@ router.get("/s/:id", async (c) => {
   } finally {
     inFlight.delete(id);
   }
-});
+}
 
 export default router;
 
 async function generateShareHtml(
   c: Context,
   id: string,
-): Promise<string | null> {
-  const client = createAnemochoreClient(c);
-  const response = await client.getGpx(id);
-
-  if (response.status === 404) {
-    return null;
-  }
-
-  if (response.status !== 200) {
-    throw new Error(
-      `Anemochore GPX retrieval failed: ${response.status}`,
-    );
-  }
-
-  const canonicalDocument =
-    (await response.json()) as CanonicalGpxDocument;
-
+  config: Config,
+  ogImageUrl: string | undefined,
+): Promise<string> {
+  const canonicalDocument = await retrieveCanonicalGpx(c, id, config.gpxPolicy, "share");
   const metadata = getMetadata(canonicalDocument);
-  const config = getConfig();
 
   const shareUrl =
     `${config.xylemPublicOrigin}/s/${encodeURIComponent(id)}`;
 
-  const ogImageUrl =
-    `${config.chloroplastPublicOrigin}/og/${encodeURIComponent(id)}`;
-
-  return viewerTemplate()
-    .replaceAll(
-      "{{TITLE}}",
-      escapeHtmlText(`${metadata.title} - GPX Share (beta)`),
-    )
-    .replaceAll(
-      "{{OG_TITLE}}",
-      escapeHtmlAttribute(`${metadata.title} - GPX Share (beta)`),
-    )
-    .replaceAll(
-      "{{OG_DESCRIPTION}}",
-      escapeHtmlAttribute(metadata.description),
-    )
-    .replaceAll(
-      "{{OG_URL}}",
-      escapeHtmlAttribute(shareUrl),
-    )
-    .replaceAll(
-      "{{OG_IMAGE}}",
-      escapeHtmlAttribute(ogImageUrl),
-    )
-    .replaceAll(
-      "{{ID}}",
-      escapeHtmlAttribute(id),
-    );
+  const values: Record<string, string> = {
+    TITLE: escapeHtmlText(`${metadata.title} - GPX Share (beta)`),
+    OG_TITLE: escapeHtmlAttribute(`${metadata.title} - GPX Share (beta)`),
+    OG_DESCRIPTION: escapeHtmlAttribute(metadata.description),
+    OG_URL: escapeHtmlAttribute(shareUrl),
+    OG_IMAGE_METADATA: ogImageUrl === undefined ? ""
+      : `<meta property="og:image" content="${escapeHtmlAttribute(ogImageUrl)}">\n    <meta name="twitter:card" content="summary_large_image">`,
+    // UUID validation restricts this value in the inline JavaScript string too.
+    ID: id,
+  };
+  return viewerTemplate().replace(/\{\{(TITLE|OG_TITLE|OG_DESCRIPTION|OG_URL|OG_IMAGE_METADATA|ID)\}\}/g,
+    (_match, key: string) => values[key]);
 }
 
 function viewerTemplate(): string {
@@ -556,8 +489,7 @@ function viewerTemplate(): string {
     <meta property="og:title" content="{{OG_TITLE}}">
     <meta property="og:description" content="{{OG_DESCRIPTION}}">
     <meta property="og:url" content="{{OG_URL}}">
-    <meta property="og:image" content="{{OG_IMAGE}}">
-    <meta name="twitter:card" content="summary_large_image">
+    {{OG_IMAGE_METADATA}}
     <title>{{TITLE}}</title>
     <link
       rel="stylesheet"
@@ -585,6 +517,11 @@ function viewerTemplate(): string {
         box-shadow: inset 0 0 0 4px #0f766e66;
       }
 
+      #viewer-error {
+        position: fixed; top: 0; left: 0; right: 0; z-index: 2000;
+        margin: 0; padding: 12px; color: #7f1d1d; background: #fee2e2;
+      }
+
       #map {
         height: 100%;
         width: 100%;
@@ -600,45 +537,86 @@ function viewerTemplate(): string {
     </script>
   </head>
   <body>
+    <p id="viewer-error" role="alert" hidden></p>
     <div id="app-root" class="app">
       <div id="map"></div>
     </div>
 
     <script type="module">
-      import { createDefaultTiliaApp } from "/tilia/src/index.js";
+      const errorElement = document.querySelector("#viewer-error");
+      const hostLifetime = new AbortController();
+      let app, renderingSubscription, active = true, destruction;
+
+      function report(error) {
+        if (!active) return;
+        errorElement.textContent = error.message || "Could not initialize or render the map.";
+        errorElement.hidden = false;
+      }
+
+      function destroyViewer() {
+        if (!destruction) {
+          active = false;
+          hostLifetime.abort();
+          renderingSubscription?.unsubscribe();
+          destruction = app?.destroy() ?? Promise.resolve();
+        }
+        return destruction;
+      }
+      window.addEventListener("pagehide", (event) => {
+        if (!event.persisted) void destroyViewer().catch(console.error);
+      }, { signal: hostLifetime.signal });
 
       async function loadGpx(id) {
-        const response = await fetch("/api/gpx/" + encodeURIComponent(id));
+        const response = await fetch("/api/gpx/" + encodeURIComponent(id), {
+          signal: hostLifetime.signal,
+        });
         if (!response.ok) {
           throw new Error("GPX request failed: " + response.status);
         }
 
         const blob = await response.blob();
+        hostLifetime.signal.throwIfAborted();
         return new File([blob], id + ".gpx", {
           type: blob.type || "application/gpx+xml",
         });
       }
 
-      const app = createDefaultTiliaApp("map", {
-        baseMapOptions: { zoom: 1, center: [0.0, 139.7413575] },
-        plugins: [
-          "tilia-panel",
-          "tilia-status",
-          "tilia-base-maps-control",
-          "tilia-layers",
-          "tilia-elevation",
-          "tilia-query-import",
-          "x-gsi-base-maps",
-          "x-opentopomap-base-maps",
-          "x-milestone",
-          "x-gpx-export"
-        ],
-      });
       try {
-        const file = await loadGpx("{{ID}}");
-        await app.load(file);
+        // Catch module-loading failures as well as factory/startup failures.
+        const { createDefaultTiliaApp } = await import("/tilia/src/index.js");
+        if (active) {
+          app = createDefaultTiliaApp("map", {
+            baseMapOptions: { zoom: 1, center: [0.0, 139.7413575] },
+            // x-milestone is temporarily disabled: wide-area GPX can trigger excessive
+            // synchronous marker generation; a separate redesign is pending.
+            plugins: [
+              "tilia-gpx-input", "tilia-gpx-renderer", "tilia-gpx-ui",
+              "tilia-map-selection-presenter",
+              "tilia-status", "tilia-base-maps-control", "tilia-layers",
+              "tilia-elevation", "tilia-query-import",
+              "x-gsi-base-maps", "x-opentopomap-base-maps",
+              "x-gpx-export",
+            ],
+          });
+          await app.ready;
+          if (active) {
+            // Ready covers plugin setup. Input completion is semantic loading;
+            // rendering is independent. Include initial and later states.
+            renderingSubscription = app.rendering.subscribe((value) => {
+              for (const status of Array.isArray(value) ? value : [value]) {
+                if (status.state === "failed" || status.state === "unavailable") {
+                  report(new Error("GPX rendering failed."));
+                }
+              }
+            });
+            const file = await loadGpx("{{ID}}");
+            if (active) await app.load(file);
+            // The GPX input plugin fits once. Do not clear independent query
+            // entries, impose an import order, or equate load with rendering.
+          }
+        }
       } catch (error) {
-        app.setStatus(error.message);
+        report(error);
       }
     </script>
   </body>
