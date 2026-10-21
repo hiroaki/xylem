@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { canonicalizeGpx } from "../src/gpx/canonicalize.js";
 import { parseGpxXml } from "../src/gpx/parse.js";
+import { policy } from "./helpers/phase-a.js";
 import { serializeGpx } from "../src/gpx/serialize.js";
 
 function fixture(name: string): string {
@@ -15,6 +16,10 @@ function fixture(name: string): string {
 
 describe("canonicalize/serialize idempotency", () => {
   const cases: Array<{ name: string; gpx: string }> = [
+    {name: "tiny positive/negative coordinates", gpx: '<gpx><wpt lat="0.0000001" lon="-0.0000001"/></gpx>'},
+    {name: "minimum subnormal coordinate", gpx: '<gpx><wpt lat="0.' + '0'.repeat(323) + '5" lon="0"/></gpx>'},
+    {name: "CR and CRLF references in name", gpx: '<gpx><wpt lat="0" lon="0"><name>A&#13;B&#13;&#10;C</name></wpt></gpx>'},
+    {name: "truncated Unicode name and exact offset/fraction time", gpx: '<gpx><trk><name>' + '😀'.repeat(255) + '…</name><trkseg><trkpt lat="90" lon="-180"><ele>0</ele><time>0001-01-01T00:00:00.000123456+14:00</time></trkpt></trkseg></trk></gpx>'},
     { name: "multi-track/route/waypoint fixture", gpx: fixture("sample.gpx") },
     {
       name: "multi-segment track only",
@@ -41,12 +46,14 @@ describe("canonicalize/serialize idempotency", () => {
       const canonical = canonicalizeGpx(parsed, {
         maxRawBytes: 2 * 1024 * 1024,
         maxTotalPoints: Number.MAX_SAFE_INTEGER,
-        maxNameLength: 200,
+        maxRoutes: 20,
+        maxRoutePointsPerRoute: 100,
       });
-      const roundTripped = canonicalizeGpx(parseGpxXml(serializeGpx(canonical)), {
+      const roundTripped = canonicalizeGpx(parseGpxXml(serializeGpx(canonical, policy)), {
         maxRawBytes: 2 * 1024 * 1024,
         maxTotalPoints: Number.MAX_SAFE_INTEGER,
-        maxNameLength: 200,
+        maxRoutes: 20,
+        maxRoutePointsPerRoute: 100,
       });
 
       expect(roundTripped).toEqual(canonical);

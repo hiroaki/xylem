@@ -29,6 +29,7 @@ export function createApp(): Hono {
   app.use("/api/upload", auditLoggerMiddleware);
   app.use("/api/gpx/*", auditLoggerMiddleware);
   app.use("/api/normalize", auditLoggerMiddleware);
+  app.use("/s/*", auditLoggerMiddleware);
 
   app.route("/", upload);
   app.route("/", gpx);

@@ -2,16 +2,21 @@
 
 # Xylem
 
-Xylem is a reference implementation of a BFF client for Anemochore.
+Xylem is a reference implementation of a backend for frontend (BFF) for Anemochore. It validates and normalizes GPX files, uses Anemochore to store canonical JSON, and serves GPX downloads and share pages. The Anemochore service API key stays on the server.
 
-It demonstrates how to build a backend-for-frontend application that communicates with the Anemochore API.
 
-The implementation keeps API credentials on the server side and provides a simple example of a secure API integration pattern.
+## Features
+
+- GPX validation and normalization for tracks, routes, and waypoints.
+- Uploads to Anemochore and GPX XML downloads from stored canonical data.
+- Deletion using signed tokens issued at upload time.
+- Share pages with map viewers and Open Graph metadata.
+- Structured JSON audit logs for API operations and share-page requests.
 
 
 ## Requirements
 
-- Node.js 22 or later (includes npm)
+- Node.js and npm versions pinned in [package.json](package.json)
 - Docker
 - Docker Compose
 
@@ -22,17 +27,23 @@ Xylem is developed using Docker for runtime execution while the project source d
 
 This means there are two separate environments:
 
-- **Host environment** — used for editing the source code with tools such as VS Code.
+- **Host environment** — used for editing source code and running local development tools and tests.
 - **Docker environment** — used to run the application.
 
-Because these environments maintain separate `node_modules` directories, dependencies must be installed in both. Dependency versions remain consistent because both installations use the same `package-lock.json`.
+These environments have separate `node_modules` directories. Install dependencies in each environment you use; both installations share the same `package-lock.json`.
 
 
 ## Initial Setup
 
+The application requires `ANEMOCHORE_API_URL`, `ANEMOCHORE_API_KEY`, `XYLEM_PUBLIC_ORIGIN`, and `XYLEM_DELETE_SECRET` in its runtime environment. See [configuration](src/config.ts) for validation and optional settings. Use a secret value for `XYLEM_DELETE_SECRET`; keep credentials out of version control.
+
+`CHLOROPLAST_PUBLIC_ORIGIN` is optional. A configured HTTP(S) URL enables Chloroplast-backed Open Graph image metadata. Use a plain origin without credentials, path, query, or fragment: this value is published in share-page HTML. Legacy HTTP(S) URLs with those components remain accepted for compatibility. When absent or explicitly empty, share pages remain functional and omit `og:image` and the image-specific Twitter card metadata. Nonempty invalid values are rejected. Retained share-page HTML is regenerated if its image URL no longer matches the effective setting.
+
+The supplied [Compose configuration](compose.yml) passes the four required variables from the host environment but does not forward `CHLOROPLAST_PUBLIC_ORIGIN`; setting it on the host alone does not enable image metadata in that container. No Compose change is needed to run without Chloroplast. Optional settings, including logging settings, require explicit forwarding when using Compose.
+
 Install the project dependencies on the host.
 
-This installation is used by development tools such as VS Code for TypeScript language services, code completion, and static analysis.
+This installation supports editor language services, code completion, static analysis, and local tests.
 
 ```bash
 npm install
@@ -106,96 +117,41 @@ docker compose down
 docker compose up --build
 ```
 
-If the `node_modules` Docker volume becomes inconsistent, recreate it:
+If the `node_modules` Docker volume becomes inconsistent, recreate it and reinstall its dependencies:
 
 ```bash
 docker compose down -v
+docker compose run --rm app npm install
 docker compose up --build
 ```
 
 
-## Deployment
+**Warning:** `docker compose down -v` deletes Compose-managed named volumes and attached anonymous volumes. In the supplied configuration, this removes the `node_modules` volume; the bind-mounted project source is not deleted. If you add other volumes, their data may also be deleted.
 
-TODO: Add deployment instructions
+
+## Tests
+
+Run `npm test` for routine local verification. See the [test guide](test/README.md) for additional test commands and the distinction between local tests and deployed-staging acceptance tests.
 
 
 ## Audit Logging
 
-Xylem uses structured JSON audit logs with:
-
-- `@hono/structured-logger`
-- `pino`
-- Hono `requestId()` middleware
-
-### Request ID policy
-
-- Request IDs are generated server-side by Hono `requestId()`.
-- Client-supplied `X-Request-Id` values are not accepted.
-- The `request_id` value is intended for Xylem/Anemochore audit correlation.
-- Xylem currently does not return `request_id` to clients in response headers.
-
-### Client IP policy
-
-- By default, Xylem does not trust forwarding headers from arbitrary clients.
-- If Xylem is deployed behind a trusted proxy (for example kamal-proxy), you can enable trusted proxy mode and choose which header is accepted for original client IP extraction.
-- If trusted forwarding information is unavailable, Xylem uses direct connection metadata when available.
-
-### Environment variables for logging behavior
-
-- `LOG_LEVEL` (default: `info`)
-- `XYLEM_TRUST_PROXY` (`true`/`1` to enable trusted forwarded IP handling)
-- `XYLEM_TRUSTED_CLIENT_IP_HEADER` (default: `X-Forwarded-For`)
-
-### Sensitive data handling
-
-Audit logs are designed to avoid writing sensitive values such as:
-
-- `ANEMOCHORE_API_KEY`
-- `XYLEM_DELETE_SECRET`
-- delete tokens
-- upload body contents
-
-### Audit scope and event semantics
-
-- Audit middleware is applied only to business routes (`/api/upload`, `/api/gpx/*`).
-- Requests for static files are intentionally excluded from audit events.
-- Log level is derived from audit result (`success` -> `info`, `failure` -> `error`).
-
-#### Actual audit events
-
-| Event | Source | Meaning |
-| --- | --- | --- |
-| `request_received` | middleware | Logged when an audited HTTP request enters Xylem. |
-| `response_sent` | middleware | Logged when Xylem sends a response for an audited request. |
-| `upload_rejected` | upload route | Upload request was rejected locally before upstream call (for example missing file). |
-| `upload_received` | upload route | Upload request payload was accepted for upstream processing. |
-| `anemochore_upload_completed` | upload route | Upstream upload finished (success, rejected response, or unreachable upstream). |
-| `gpx_stored` | upload route | Final GPX store outcome from Xylem's perspective. |
-| `gpx_retrieval_requested` | gpx route | GPX retrieval request accepted and forwarded workflow started. |
-| `anemochore_gpx_fetched` | gpx route | Upstream GPX retrieval finished (success, rejected response, or unreachable upstream). |
-| `gpx_deletion_requested` | gpx route | GPX deletion request accepted and token validation started. |
-| `gpx_deletion_rejected` | gpx route | GPX deletion request rejected locally (missing/invalid token). |
-| `anemochore_gpx_deleted` | gpx route | Upstream GPX deletion finished (success, rejected response, or unreachable upstream). |
-
-#### Failure event classification
-
-| failure_reason | Typical condition | Notes |
-| --- | --- | --- |
-| `anemochore_rejected` | Anemochore returns a non-success status such as 4xx/5xx | Upstream responded, but the request is treated as rejected |
-| `anemochore_unreachable` | Connection failure, timeout, or other transport error before receiving a response | `error_code` and/or `error_message` may be present |
-| `anemochore_invalid_response` | Upload path gets a nominally successful upstream response with missing required fields (`id`/`delete_key`) | Treated as invalid upstream response shape |
-
+Xylem emits structured JSON audit logs for uploads, normalization, GPX retrieval/deletion, and share-page requests. See the [audit logging guide](docs/audit-logging.md) for events, failure classifications, request ID propagation, trusted proxy settings, and sensitive-data handling.
 
 ## API Specification
 
-Xylem exposes the same public API as Anemochore.
+Xylem provides browser-facing endpoints with formats and authentication that differ from the [Anemochore storage API](https://github.com/hiroaki/anemochore/blob/main/docs/api.md):
 
-For endpoint definitions, request and response formats, authentication requirements, and error handling, refer to the Anemochore API specification:
+| Endpoint | Xylem behavior |
+| --- | --- |
+| `POST /api/normalize` | Accepts a multipart `file` containing GPX and returns normalized GPX XML without storing it. |
+| `POST /api/upload` | Accepts a multipart GPX `file`, validates and normalizes it, then uploads canonical JSON to Anemochore. Returns `id`, `url`, `deleteUrl`, and a signed `deleteToken` instead of the upstream `delete_key`. |
+| `GET /api/gpx/:id` | Retrieves and validates canonical JSON from Anemochore, then returns GPX XML. |
+| `DELETE /api/gpx/:id` | Requires `X-Delete-Token` from the upload response. Xylem verifies it and supplies Anemochore's service credentials and deletion key upstream. |
+| `GET /s/:id` | Serves a share page with a map viewer and Open Graph metadata. The viewer requires Tilia assets under `/tilia/`; they are not bundled in this repository's `public/` directory. |
+| `GET /api/health` | Returns the local service health response. |
 
-- https://github.com/hiroaki/anemochore/blob/main/docs/api.md
-
-Xylem acts as a Backend for Frontend (BFF) and forwards requests to Anemochore while keeping the Anemochore service API key on the server side. The public API is intentionally kept compatible with the Anemochore API.
-
+Upload and normalization use the same GPX processing boundary; unsupported content is not guaranteed to survive normalization. See the [route implementations](src/routes) and [GPX processing code](src/gpx/process.ts) for current validation, response, and error behavior. The upstream API specification describes the storage service, not Xylem's public contract.
 
 ## License
 

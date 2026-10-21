@@ -23,6 +23,7 @@ function buildFormData(content: string, filename = "route.gpx"): FormData {
 async function setupApp(): Promise<Hono> {
   process.env.ANEMOCHORE_API_URL = "https://anemochore.example";
   process.env.ANEMOCHORE_API_KEY = "TEST_ANEMOCHORE_API_KEY";
+  process.env.CHLOROPLAST_PUBLIC_ORIGIN = "https://og.example";
   process.env.XYLEM_PUBLIC_ORIGIN = "https://gpx.example";
   process.env.XYLEM_DELETE_SECRET = "TEST_XYLEM_DELETE_SECRET";
   process.env.XYLEM_TRUST_PROXY = "false";

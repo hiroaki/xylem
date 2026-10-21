@@ -25,6 +25,7 @@ function buildFormData(content: string): FormData {
 async function setupApp(): Promise<Hono> {
   process.env.ANEMOCHORE_API_URL = "https://anemochore.example";
   process.env.ANEMOCHORE_API_KEY = "TEST_ANEMOCHORE_API_KEY";
+  process.env.CHLOROPLAST_PUBLIC_ORIGIN = "https://og.example";
   process.env.XYLEM_PUBLIC_ORIGIN = "https://gpx.example";
   process.env.XYLEM_DELETE_SECRET = "TEST_XYLEM_DELETE_SECRET";
   process.env.XYLEM_TRUST_PROXY = "false";
@@ -49,7 +50,8 @@ describe("normalize/upload canonicalization consistency", () => {
     const TEST_GPX_POLICY = {
       maxRawBytes: 2 * 1024 * 1024,
       maxTotalPoints: 50_000,
-      maxNameLength: 200,
+      maxRoutes: 20,
+      maxRoutePointsPerRoute: 100,
     };
 
     // What /api/normalize would show the user, re-canonicalized (as a browser

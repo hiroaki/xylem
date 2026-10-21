@@ -1,6 +1,5 @@
 import type { Context } from "hono";
 import { getConfig } from "../config.js";
-import type { CanonicalGpxDocument } from "../gpx/canonicalize.js";
 
 class AnemochoreClient {
   constructor(
@@ -22,22 +21,24 @@ class AnemochoreClient {
     };
   }
 
-  async upload(canonicalDocument: CanonicalGpxDocument): Promise<Response> {
+  async upload(canonicalJson: string): Promise<Response> {
     const response = await fetch(`${this.apiUrl}/api/upload`, {
       method: "POST",
       headers: {
         ...this.authenticatedHeaders(),
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(canonicalDocument),
+      body: canonicalJson,
     });
 
     return response;
   }
 
-  async getGpx(id: string): Promise<Response> {
-    const response = await fetch(`${this.apiUrl}/api/gpx/${id}`, {
+  async getGpx(id: string, signal?: AbortSignal): Promise<Response> {
+    const response = await fetch(`${this.apiUrl}/api/gpx/${encodeURIComponent(id)}`, {
       headers: this.headers(),
+      signal,
+      redirect: "manual",
     });
 
     return response;

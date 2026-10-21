@@ -1,12 +1,11 @@
+import { retrieveCanonicalGpx } from "../services/canonical-gpx.js";
+import { retrievalErrorResponse } from "./retrieval-error.js";
 import { Hono } from "hono";
 import { getConfig } from "../config.js";
 import { createAnemochoreClient } from "../services/anemochore.js";
 import { verifyDeleteToken } from "../utils/delete-token.js";
 import { serializeGpx } from "../gpx/serialize.js";
-import {
-  emitAuditEvent,
-  resultFromStatus,
-} from "../logging/audit-event.js";
+import { emitAuditEvent, resultFromStatus } from "../logging/audit-event.js";
 import {
   buildAnemochoreUnreachableError,
   getSafeNetworkErrorDetails,
@@ -24,59 +23,13 @@ gpx.get("/api/gpx/:id", async (c) => {
     gpx_id: gpxId,
   });
 
-  const client = createAnemochoreClient(c);
-
-  let response: Response;
-
   try {
-    response = await client.getGpx(gpxId);
+    const canonical = await retrieveCanonicalGpx(c, gpxId, config.gpxPolicy, "gpx");
+    const xml = serializeGpx(canonical, config.gpxPolicy);
+    return c.body(xml, 200, { "Content-Type": "application/gpx+xml; charset=utf-8" });
   } catch (error) {
-    const errorDetails = getSafeNetworkErrorDetails(error);
-
-    emitAuditEvent(c, {
-      event: "anemochore_gpx_fetched",
-      result: "failure",
-      gpx_id: gpxId,
-      failure_reason: "anemochore_unreachable",
-      error_message: errorDetails.error_message,
-      error_code: errorDetails.error_code,
-    });
-
-    throw buildAnemochoreUnreachableError(
-      "gpx retrieval",
-      errorDetails.error_code,
-    );
+    return retrievalErrorResponse(c, error);
   }
-
-  const retrievalResult = resultFromStatus(response.status);
-
-  emitAuditEvent(c, {
-    event: "anemochore_gpx_fetched",
-    result: retrievalResult,
-    status: response.status,
-    gpx_id: gpxId,
-    ...(retrievalResult === "failure"
-      ? { failure_reason: "anemochore_rejected" as const }
-      : {}),
-  });
-
-  if (response.status !== 200) {
-    return new Response(response.body, {
-      status: response.status,
-      headers: response.headers,
-    });
-  }
-
-  // Anemochore returns the canonical payload as JSON; re-serialize it to GPX XML
-  // here so Tilia (which never changes) keeps receiving real GPX bytes.
-  const canonicalDocument = await response.json();
-  const gpxXml = serializeGpx(canonicalDocument);
-
-  return c.body(
-    gpxXml,
-    200,
-    { "Content-Type": "application/gpx+xml; charset=utf-8" },
-  );
 });
 
 gpx.delete("/api/gpx/:id", async (c) => {
