@@ -1,5 +1,6 @@
-import { assertPublicId, retrieveCanonicalGpx } from "../services/canonical-gpx.js";
+import { assertPublicId, CanonicalRetrievalError, retrieveCanonicalGpx } from "../services/canonical-gpx.js";
 import { retrievalErrorResponse } from "./retrieval-error.js";
+import { readShareNotFoundHtml } from "./share-not-found.js";
 import { emitAuditEvent } from "../logging/audit-event.js";
 import type { CanonicalCoordinates, CanonicalTrack, CanonicalRoute, CanonicalWaypoint, CanonicalGpxDocument } from "../gpx/contract.js";
 import { Hono } from "hono";
@@ -410,6 +411,17 @@ router.get("/s/:id", async (c) => {
   try {
     return await serveShare(c, c.req.param("id"));
   } catch (error) {
+    if (error instanceof CanonicalRetrievalError && error.status === 404) {
+      const html = await readShareNotFoundHtml(getConfig().xylemStaticDir);
+      if (html !== null) {
+        if (error.reason === "invalid_id") {
+          emitAuditEvent(c, {event: "gpx_retrieval_failed", result: "failure",
+            status: 404, failure_reason: "invalid_id"});
+        }
+        c.header("Cache-Control", "no-store");
+        return c.html(html, 404);
+      }
+    }
     return retrievalErrorResponse(c, error);
   }
 });

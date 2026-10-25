@@ -89,6 +89,26 @@ test("cached HTML remains 200 when the underlying resource disappears, then repo
   await expect(page.locator("#viewer-error")).toHaveText("GPX request failed: 404");
 });
 
+test("missing share uses Japanese browser preferences and honors an explicit English override", async ({ page, request, id }) => {
+  await seed(request, id, null, 404);
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "languages", { get: () => ["en-US", "ja-JP"] });
+  });
+  const response = await page.goto(`/s/${id}`);
+  expect(response?.status()).toBe(404);
+  await expect(page).toHaveURL(`http://127.0.0.1:4184/s/${id}`);
+  expect(response?.headers()["cache-control"]).toBe("no-store");
+  await expect(page.locator("html")).toHaveAttribute("lang", "ja");
+  await expect(page).toHaveTitle("GPXデータが見つかりません - GPX Share (beta)");
+  await expect(page.getByRole("heading", { name: "GPXデータが見つかりません" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "トップページへ戻る" })).toHaveAttribute("href", "/");
+  await page.goto(`/s/${id}?lang=en`);
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await page.getByRole("link", { name: "Back to home" }).click();
+  await expect(page).toHaveURL("http://127.0.0.1:4184/");
+  await expect(page).toHaveTitle("GPX Share (beta)");
+});
+
 test("query failure does not prevent primary loading", async ({ page, id }) => {
   await page.route("https://query.example/extra.gpx", route => route.fulfill({ status: 404, body: "Missing" }));
   await page.goto(`/s/${id}?gpx=${encodeURIComponent("https://query.example/extra.gpx")}`);
