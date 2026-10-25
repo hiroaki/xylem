@@ -126,7 +126,7 @@ describe("Phase B actual cross-repository contract", () => {
     const response = await harness.app.request(`/api/gpx/${id}`);
     expect(response.status).toBe(200);
     const parsed = parseGpxText(await response.text(), {
-      createDomParser: ({onError}: any) => new DOMParser({errorHandler: {warning: onError, error: onError, fatalError: onError}}),
+      createDomParser: ({onError}: any) => new DOMParser({onError: (_level: string, message: string) => onError(message)}),
     });
     expect(parsed.routes).toHaveLength(2);
     for (const [index, route] of expectedCanonical.data.routes.entries()) {

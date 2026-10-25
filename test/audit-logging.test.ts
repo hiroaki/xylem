@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
 
-import type { BaseLogger } from "@hono/structured-logger";
+import type { BaseLogger } from "../src/logging/base-logger.js";
 import type { Hono } from "hono";
 import { createDeleteToken } from "../src/utils/delete-token.js";
 import { normalizeUserAgent } from "../src/middlewares/client-user-agent.js";
