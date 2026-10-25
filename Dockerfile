@@ -1,4 +1,6 @@
-FROM node:24-alpine AS base
+FROM node:24.22.1-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53 AS base
+
+RUN node -e "if (process.versions.node !== '24.22.1') process.exit(1)"
 
 FROM base AS builder
 
@@ -10,7 +12,7 @@ RUN npm ci
 
 COPY . .
 RUN npm run build && \
-    npm prune --production && \
+    npm prune --omit=dev && \
     touch build-info.json
 
 FROM base AS runner

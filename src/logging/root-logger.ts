@@ -1,5 +1,5 @@
 import pino from "pino";
-import type { BaseLogger } from "@hono/structured-logger";
+import type { BaseLogger } from "./base-logger.js";
 
 import { getConfig } from "../config.js";
 

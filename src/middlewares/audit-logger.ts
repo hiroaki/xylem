@@ -1,5 +1,5 @@
 import { structuredLogger } from "@hono/structured-logger";
-import type { BaseLogger } from "@hono/structured-logger";
+import type { BaseLogger } from "../logging/base-logger.js";
 
 import type { Context, MiddlewareHandler } from "hono";
 

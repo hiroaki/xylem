@@ -1,5 +1,5 @@
 import type { Context } from "hono";
-import type { BaseLogger } from "@hono/structured-logger";
+import type { BaseLogger } from "./base-logger.js";
 
 export type AuditResult = "success" | "failure";
 export type AuditFailureReason =
